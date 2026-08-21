@@ -1,0 +1,12 @@
+A arte dos candidatos usada como marca d'agua do formulario e o arquivo:
+
+    candidatos.jpg
+
+Para trocar, basta substituir esse arquivo (JPG, PNG ou WEBP servem; se mudar a
+extensao, ajuste o caminho em Configuracoes > Formulario).
+
+Alternativa sem mexer em arquivo: entre na area admin como administrador e use
+Configuracoes > Formulario > "Enviar imagem de fundo".
+
+Dica: quanto maior a resolucao da arte, mais nitida a marca d'agua em telas
+grandes. A imagem atual tem 399x501.

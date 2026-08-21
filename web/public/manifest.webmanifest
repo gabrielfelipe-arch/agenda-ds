@@ -1,0 +1,14 @@
+{
+  "name": "Agenda 5588 - Todos pela Saúde",
+  "short_name": "Agenda 5588",
+  "description": "Solicitação e gestão de agendas",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f7fb",
+  "theme_color": "#0b2c5e",
+  "icons": [
+    { "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
