@@ -5,8 +5,8 @@ import { audienceOptions, onlyDigits, todayISO, upper } from '../shared';
 
 export const publicRouter = Router();
 
-publicRouter.get('/form', (_req, res) => {
-  const s = getSettings();
+publicRouter.get('/form', async (_req, res) => {
+  const s = await getSettings();
   res.json({
     title: s.form_title,
     description: s.form_description,
@@ -39,16 +39,16 @@ const createSchema = z.object({
   agenda: z.string().trim().min(10, 'Descreva a pauta com pelo menos 10 caracteres').max(4000),
 });
 
-function nextProtocol(): string {
+async function nextProtocol(): Promise<string> {
   const year = new Date().getFullYear();
-  const row = db
+  const row = await db
     .prepare("SELECT COUNT(*) AS n FROM requests WHERE protocol LIKE ?")
-    .get(`AG-${year}-%`) as { n: number };
-  return `AG-${year}-${String(row.n + 1).padStart(4, '0')}`;
+    .get<{ n: number }>(`AG-${year}-%`);
+  return `AG-${year}-${String((row?.n ?? 0) + 1).padStart(4, '0')}`;
 }
 
-publicRouter.post('/requests', (req, res) => {
-  const s = getSettings();
+publicRouter.post('/requests', async (req, res) => {
+  const s = await getSettings();
   if (s.form_open === 'false') {
     return res.status(403).json({ error: 'O formulário está temporariamente fechado para novas solicitações.' });
   }
@@ -87,9 +87,9 @@ publicRouter.post('/requests', (req, res) => {
 
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
-  const protocol = nextProtocol();
+  const protocol = await nextProtocol();
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO requests (
       id, protocol, created_at, updated_at, status, requester_name, whatsapp, event_date,
       start_time, duration_hours, arrival_time, cep, street, number, complement, district,

@@ -1,0 +1,9 @@
+{
+  "name": "agenda5588",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd server && npm run dev",
+    "build": "cd web && npm run build && cd ../server && npm run build"
+  }
+}

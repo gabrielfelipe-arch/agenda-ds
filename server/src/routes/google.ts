@@ -1,25 +1,24 @@
 import { Router } from 'express';
-import { db, getSettings } from '../db';
+import { db, getSettings, putTransient, takeTransient } from '../db';
 import { requireAuth, requireRole } from '../auth';
 import { RequestRow, addHours, formatAddress } from '../shared';
 import * as gcal from '../services/googleCalendar';
 
 export const googleRouter = Router();
 
-/** Estados de OAuth pendentes (curta duração). */
-const pendingStates = new Map<string, number>();
+/* O state do OAuth vai para o banco: o callback do Google pode cair em outra
+ * instancia serverless, onde um Map em memoria estaria vazio. */
 
 /* O callback do Google chega sem cabeçalho de autenticação: validado pelo state. */
 googleRouter.get('/callback', async (req, res) => {
   const state = String(req.query.state || '');
   const code = String(req.query.code || '');
-  const expires = pendingStates.get(state);
-  pendingStates.delete(state);
+  const known = state ? await takeTransient(`oauth:${state}`) : null;
 
   const done = (ok: boolean, msg: string) =>
     res.redirect(`/admin/configuracoes?google=${ok ? 'ok' : 'erro'}&msg=${encodeURIComponent(msg)}`);
 
-  if (!expires || expires < Date.now()) return done(false, 'Sessão de autorização expirada. Tente novamente.');
+  if (!known) return done(false, 'Sessão de autorização expirada. Tente novamente.');
   if (!code) return done(false, String(req.query.error || 'Autorização cancelada'));
 
   try {
@@ -33,8 +32,8 @@ googleRouter.get('/callback', async (req, res) => {
 googleRouter.use(requireAuth);
 
 googleRouter.get('/status', async (_req, res) => {
-  const connected = gcal.isConnected();
-  const s = getSettings();
+  const connected = await gcal.isConnected();
+  const s = await getSettings();
   res.json({
     connected,
     configured: Boolean(s.google_client_id && s.google_client_secret),
@@ -44,18 +43,18 @@ googleRouter.get('/status', async (_req, res) => {
   });
 });
 
-googleRouter.get('/auth-url', requireRole('admin'), (_req, res) => {
+googleRouter.get('/auth-url', requireRole('admin'), async (_req, res) => {
   const state = crypto.randomUUID();
-  pendingStates.set(state, Date.now() + 10 * 60_000);
-  const url = gcal.authUrl(state);
+  await putTransient(`oauth:${state}`, '1', 10 * 60_000);
+  const url = await gcal.authUrl(state);
   if (!url) {
     return res.status(400).json({ error: 'Preencha o Client ID e o Client Secret antes de conectar.' });
   }
   res.json({ url });
 });
 
-googleRouter.post('/disconnect', requireRole('admin'), (_req, res) => {
-  gcal.disconnect();
+googleRouter.post('/disconnect', requireRole('admin'), async (_req, res) => {
+  await gcal.disconnect();
   res.json({ ok: true });
 });
 
@@ -77,7 +76,7 @@ googleRouter.get('/events', async (req, res) => {
   const source = String(req.query.source || 'local');
 
   if (source === 'google') {
-    if (!gcal.isConnected()) return res.status(400).json({ error: 'Google Agenda não está conectado' });
+    if (!(await gcal.isConnected())) return res.status(400).json({ error: 'Google Agenda não está conectado' });
     try {
       const items = await gcal.listEvents(`${from}T00:00:00.000Z`, `${to}T23:59:59.999Z`);
       return res.json({ source, items });
@@ -86,11 +85,11 @@ googleRouter.get('/events', async (req, res) => {
     }
   }
 
-  const rows = db
+  const rows = await db
     .prepare(
       "SELECT * FROM requests WHERE event_date BETWEEN ? AND ? AND status IN ('confirmado','realizado') ORDER BY event_date, start_time"
     )
-    .all(from, to) as RequestRow[];
+    .all<RequestRow>(from, to);
 
   res.json({
     source: 'local',

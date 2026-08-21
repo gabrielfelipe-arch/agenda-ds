@@ -14,8 +14,8 @@ export function redirectUri(): string {
 
 type OAuth2Client = InstanceType<typeof gauth.OAuth2>;
 
-export function makeOAuthClient(): OAuth2Client | null {
-  const s = getSettings();
+export async function makeOAuthClient(): Promise<OAuth2Client | null> {
+  const s = await getSettings();
   if (!s.google_client_id || !s.google_client_secret) return null;
   const client = new gauth.OAuth2(s.google_client_id, s.google_client_secret, redirectUri());
   if (s.google_tokens) {
@@ -26,15 +26,23 @@ export function makeOAuthClient(): OAuth2Client | null {
     }
   }
   client.on('tokens', (tokens) => {
-    const current = getSettings().google_tokens;
-    const merged = { ...(current ? JSON.parse(current) : {}), ...tokens };
-    setSettings({ google_tokens: JSON.stringify(merged) });
+    // O evento de refresh e sincrono, mas a gravacao agora e assincrona.
+    // Se falhar, nao pode derrubar a requisicao em andamento.
+    void (async () => {
+      try {
+        const current = (await getSettings()).google_tokens;
+        const merged = { ...(current ? JSON.parse(current) : {}), ...tokens };
+        await setSettings({ google_tokens: JSON.stringify(merged) });
+      } catch (e) {
+        console.warn('[google] falha ao salvar tokens renovados:', (e as Error).message);
+      }
+    })();
   });
   return client;
 }
 
-export function isConnected(): boolean {
-  const s = getSettings();
+export async function isConnected(): Promise<boolean> {
+  const s = await getSettings();
   if (!s.google_tokens) return false;
   try {
     const t = JSON.parse(s.google_tokens);
@@ -44,8 +52,8 @@ export function isConnected(): boolean {
   }
 }
 
-export function authUrl(state: string): string | null {
-  const client = makeOAuthClient();
+export async function authUrl(state: string): Promise<string | null> {
+  const client = await makeOAuthClient();
   if (!client) return null;
   return client.generateAuthUrl({
     access_type: 'offline',
@@ -56,26 +64,26 @@ export function authUrl(state: string): string | null {
 }
 
 export async function exchangeCode(code: string): Promise<void> {
-  const client = makeOAuthClient();
+  const client = await makeOAuthClient();
   if (!client) throw new Error('Credenciais do Google não configuradas');
   const { tokens } = await client.getToken(code);
-  const current = getSettings().google_tokens;
+  const current = (await getSettings()).google_tokens;
   const merged = { ...(current ? JSON.parse(current) : {}), ...tokens };
-  setSettings({ google_tokens: JSON.stringify(merged) });
+  await setSettings({ google_tokens: JSON.stringify(merged) });
 }
 
-export function disconnect(): void {
-  setSettings({ google_tokens: '' });
+export async function disconnect(): Promise<void> {
+  await setSettings({ google_tokens: '' });
 }
 
-function calendarClient(): calendar_v3.Calendar | null {
-  const client = makeOAuthClient();
-  if (!client || !isConnected()) return null;
+async function calendarClient(): Promise<calendar_v3.Calendar | null> {
+  const client = await makeOAuthClient();
+  if (!client || !(await isConnected())) return null;
   return calendarApi({ version: 'v3', auth: client });
 }
 
 export async function listCalendars() {
-  const cal = calendarClient();
+  const cal = await calendarClient();
   if (!cal) return [];
   const res = await cal.calendarList.list({ maxResults: 100 });
   return (res.data.items || []).map((c) => ({
@@ -88,7 +96,7 @@ export async function listCalendars() {
 
 /** O id do calendário principal de uma conta Google é o próprio e-mail. */
 export async function getUserEmail(): Promise<string> {
-  const cal = calendarClient();
+  const cal = await calendarClient();
   if (!cal) return '';
   try {
     const res = await cal.calendars.get({ calendarId: 'primary' });
@@ -99,8 +107,8 @@ export async function getUserEmail(): Promise<string> {
   }
 }
 
-function buildEventBody(r: RequestRow): calendar_v3.Schema$Event {
-  const s = getSettings();
+async function buildEventBody(r: RequestRow): Promise<calendar_v3.Schema$Event> {
+  const s = await getSettings();
   const tz = s.timezone || env.timezone;
   const prefix = s.google_event_prefix ? `${s.google_event_prefix} ` : '';
   const endTime = addHours(r.start_time, r.duration_hours);
@@ -126,10 +134,10 @@ function buildEventBody(r: RequestRow): calendar_v3.Schema$Event {
 }
 
 export async function upsertEvent(r: RequestRow): Promise<{ id: string; link: string } | null> {
-  const cal = calendarClient();
+  const cal = await calendarClient();
   if (!cal) return null;
-  const calendarId = getSettings().google_calendar_id || 'primary';
-  const body = buildEventBody(r);
+  const calendarId = (await getSettings()).google_calendar_id || 'primary';
+  const body = await buildEventBody(r);
   if (r.google_event_id) {
     try {
       const res = await cal.events.update({ calendarId, eventId: r.google_event_id, requestBody: body });
@@ -143,9 +151,9 @@ export async function upsertEvent(r: RequestRow): Promise<{ id: string; link: st
 }
 
 export async function deleteEvent(eventId: string): Promise<void> {
-  const cal = calendarClient();
+  const cal = await calendarClient();
   if (!cal) return;
-  const calendarId = getSettings().google_calendar_id || 'primary';
+  const calendarId = (await getSettings()).google_calendar_id || 'primary';
   try {
     await cal.events.delete({ calendarId, eventId });
   } catch {
@@ -154,9 +162,9 @@ export async function deleteEvent(eventId: string): Promise<void> {
 }
 
 export async function listEvents(timeMin: string, timeMax: string) {
-  const cal = calendarClient();
+  const cal = await calendarClient();
   if (!cal) return [];
-  const calendarId = getSettings().google_calendar_id || 'primary';
+  const calendarId = (await getSettings()).google_calendar_id || 'primary';
   const res = await cal.events.list({
     calendarId,
     timeMin,

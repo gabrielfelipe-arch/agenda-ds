@@ -25,9 +25,9 @@ import {
 } from '../shared';
 import * as gcal from '../services/googleCalendar';
 
-function logActivity(req: import('express').Request, requestId: string | null, action: string, detail = '') {
+async function logActivity(req: import('express').Request, requestId: string | null, action: string, detail = '') {
   const user = (req as AuthedRequest).user;
-  db.prepare(
+  await db.prepare(
     'INSERT INTO activity_log (created_at, user_id, user_name, request_id, action, detail) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(new Date().toISOString(), user?.id ?? null, user?.name ?? null, requestId, action, detail);
 }
@@ -108,29 +108,28 @@ function buildQuery(f: Filters) {
   return { sql, params };
 }
 
-function queryRequests(f: Filters): RequestRow[] {
+function queryRequests(f: Filters): Promise<RequestRow[]> {
   const { sql, params } = buildQuery(f);
-  return db.prepare(sql).all(params) as RequestRow[];
+  return db.prepare(sql).all<RequestRow>(params);
 }
 
-adminRouter.get('/requests', (req, res) => {
-  const rows = queryRequests(req.query as Filters);
+adminRouter.get('/requests', async (req, res) => {
+  const rows = await queryRequests(req.query as Filters);
   res.json({ items: rows, total: rows.length });
 });
 
-adminRouter.get('/stats', (_req, res) => {
-  const byStatus = db.prepare('SELECT status, COUNT(*) AS n FROM requests GROUP BY status').all() as {
-    status: Status;
-    n: number;
-  }[];
+adminRouter.get('/stats', async (_req, res) => {
+  const byStatus = await db
+    .prepare('SELECT status, COUNT(*) AS n FROM requests GROUP BY status')
+    .all<{ status: Status; n: number }>();
   const total = byStatus.reduce((a, b) => a + b.n, 0);
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = db
+  const upcoming = await db
     .prepare("SELECT COUNT(*) AS n FROM requests WHERE event_date >= ? AND status = 'confirmado'")
-    .get(today) as { n: number };
+    .get<{ n: number }>(today);
   res.json({
     total,
-    upcomingConfirmed: upcoming.n,
+    upcomingConfirmed: upcoming?.n ?? 0,
     byStatus: Object.fromEntries(byStatus.map((r) => [r.status, r.n])),
   });
 });
@@ -139,7 +138,7 @@ adminRouter.get('/stats', (_req, res) => {
  * Opções de filtro derivadas do que existe de fato no banco — evita oferecer
  * combinações que nunca retornariam nada. Cada opção vem com a contagem.
  */
-adminRouter.get('/options', (_req, res) => {
+adminRouter.get('/options', async (_req, res) => {
   const facet = (column: string) =>
     db
       .prepare(
@@ -147,32 +146,33 @@ adminRouter.get('/options', (_req, res) => {
          WHERE ${column} IS NOT NULL AND TRIM(${column}) <> ''
          GROUP BY ${column} ORDER BY ${column}`
       )
-      .all() as { value: string; count: number }[];
+      .all<{ value: string; count: number }>();
 
-  const statusRows = facet('status');
+  const statusRows = await facet('status');
   const statuses = (STATUSES as readonly string[])
     .map((value) => ({ value, count: statusRows.find((r) => r.value === value)?.count ?? 0 }))
     .filter((s) => s.count > 0);
 
-  const districts = db
+  const districts = await db
     .prepare(
       `SELECT district AS value, city, COUNT(*) AS count FROM requests
        WHERE district IS NOT NULL AND TRIM(district) <> ''
        GROUP BY district, city ORDER BY district`
     )
-    .all() as { value: string; city: string; count: number }[];
+    .all<{ value: string; city: string; count: number }>();
 
+  const totalRow = await db.prepare('SELECT COUNT(*) AS n FROM requests').get<{ n: number }>();
   res.json({
     statuses,
-    cities: facet('city'),
+    cities: await facet('city'),
     districts,
-    audiences: facet('audience'),
-    total: (db.prepare('SELECT COUNT(*) AS n FROM requests').get() as { n: number }).n,
+    audiences: await facet('audience'),
+    total: totalRow?.n ?? 0,
   });
 });
 
-adminRouter.get('/requests/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow | undefined;
+adminRouter.get('/requests/:id', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id);
   if (!row) return res.status(404).json({ error: 'Solicitação não encontrada' });
   res.json(row);
 });
@@ -207,7 +207,7 @@ const updateSchema = z.object({
 });
 
 adminRouter.patch('/requests/:id', async (req, res) => {
-  const current = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow | undefined;
+  const current = await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id);
   if (!current) return res.status(404).json({ error: 'Solicitação não encontrada' });
 
   const parsed = updateSchema.safeParse(req.body);
@@ -233,7 +233,7 @@ adminRouter.patch('/requests/:id', async (req, res) => {
   const keys = Object.keys(data) as (keyof typeof data)[];
   if (keys.length) {
     const sets = keys.map((k) => `${k} = @${k}`).join(', ');
-    db.prepare(`UPDATE requests SET ${sets}, updated_at = @updated_at WHERE id = @id`).run({
+    await db.prepare(`UPDATE requests SET ${sets}, updated_at = @updated_at WHERE id = @id`).run({
       ...data,
       updated_at: new Date().toISOString(),
       id: req.params.id,
@@ -241,18 +241,18 @@ adminRouter.patch('/requests/:id', async (req, res) => {
   }
 
   if (data.status === 'confirmado' && current.status !== 'confirmado') {
-    db.prepare('UPDATE requests SET confirmed_at = ? WHERE id = ?').run(new Date().toISOString(), req.params.id);
+    await db.prepare('UPDATE requests SET confirmed_at = ? WHERE id = ?').run(new Date().toISOString(), req.params.id);
   }
 
-  let updated = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow;
+  let updated = (await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id))!;
   const warnings: string[] = [];
 
-  if (syncGoogle !== false && gcal.isConnected()) {
+  if (syncGoogle !== false && (await gcal.isConnected())) {
     try {
       if (updated.status === 'confirmado' || updated.status === 'realizado') {
         const ev = await gcal.upsertEvent(updated);
         if (ev) {
-          db.prepare('UPDATE requests SET google_event_id = ?, google_event_link = ? WHERE id = ?').run(
+          await db.prepare('UPDATE requests SET google_event_id = ?, google_event_link = ? WHERE id = ?').run(
             ev.id,
             ev.link,
             updated.id
@@ -260,11 +260,11 @@ adminRouter.patch('/requests/:id', async (req, res) => {
         }
       } else if (updated.google_event_id) {
         await gcal.deleteEvent(updated.google_event_id);
-        db.prepare('UPDATE requests SET google_event_id = NULL, google_event_link = NULL WHERE id = ?').run(
+        await db.prepare('UPDATE requests SET google_event_id = NULL, google_event_link = NULL WHERE id = ?').run(
           updated.id
         );
       }
-      updated = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow;
+      updated = (await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id))!;
     } catch (e) {
       warnings.push(`Falha ao sincronizar com o Google Agenda: ${(e as Error).message}`);
     }
@@ -274,7 +274,7 @@ adminRouter.patch('/requests/:id', async (req, res) => {
     (data.event_date && data.event_date !== current.event_date) ||
     (data.start_time && data.start_time !== current.start_time);
   if (remarcou) {
-    logActivity(
+    await logActivity(
       req,
       updated.id,
       'reagendamento',
@@ -283,54 +283,54 @@ adminRouter.patch('/requests/:id', async (req, res) => {
   }
 
   if (data.status && data.status !== current.status) {
-    logActivity(req, updated.id, 'status', `${STATUS_LABELS[current.status]} -> ${STATUS_LABELS[updated.status]}`);
+    await logActivity(req, updated.id, 'status', `${STATUS_LABELS[current.status]} -> ${STATUS_LABELS[updated.status]}`);
   } else if (keys.length) {
-    logActivity(req, updated.id, 'edicao', keys.join(', '));
+    await logActivity(req, updated.id, 'edicao', keys.join(', '));
   }
 
   res.json({ item: updated, warnings });
 });
 
 adminRouter.post('/requests/:id/sync', async (req, res) => {
-  const row = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow | undefined;
+  const row = await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id);
   if (!row) return res.status(404).json({ error: 'Solicitação não encontrada' });
-  if (!gcal.isConnected()) return res.status(400).json({ error: 'Google Agenda não está conectado' });
+  if (!(await gcal.isConnected())) return res.status(400).json({ error: 'Google Agenda não está conectado' });
   try {
     const ev = await gcal.upsertEvent(row);
     if (ev) {
-      db.prepare('UPDATE requests SET google_event_id = ?, google_event_link = ? WHERE id = ?').run(
+      await db.prepare('UPDATE requests SET google_event_id = ?, google_event_link = ? WHERE id = ?').run(
         ev.id,
         ev.link,
         row.id
       );
     }
-    res.json({ item: db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) });
+    res.json({ item: await db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
 });
 
 adminRouter.delete('/requests/:id', requireRole('admin'), async (req, res) => {
-  const row = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow | undefined;
+  const row = await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id);
   if (!row) return res.status(404).json({ error: 'Solicitação não encontrada' });
-  if (row.google_event_id && gcal.isConnected()) {
+  if (row.google_event_id && (await gcal.isConnected())) {
     try {
       await gcal.deleteEvent(row.google_event_id);
     } catch {
       /* segue com a exclusão local */
     }
   }
-  db.prepare('DELETE FROM requests WHERE id = ?').run(req.params.id);
-  logActivity(req, null, 'exclusao', `${row.protocol} - ${row.requester_name}`);
+  await db.prepare('DELETE FROM requests WHERE id = ?').run(req.params.id);
+  await logActivity(req, null, 'exclusao', `${row.protocol} - ${row.requester_name}`);
   res.json({ ok: true });
 });
 
 /* ------------------------------ whatsapp ------------------------------ */
 
-adminRouter.get('/requests/:id/whatsapp', (req, res) => {
-  const row = db.prepare('SELECT * FROM requests WHERE id = ?').get(req.params.id) as RequestRow | undefined;
+adminRouter.get('/requests/:id/whatsapp', async (req, res) => {
+  const row = await db.prepare('SELECT * FROM requests WHERE id = ?').get<RequestRow>(req.params.id);
   if (!row) return res.status(404).json({ error: 'Solicitação não encontrada' });
-  const s = getSettings();
+  const s = await getSettings();
   const kind = String(req.query.kind || 'confirm');
   const templates: Record<string, string> = {
     confirm: s.whatsapp_confirm_template,
@@ -351,7 +351,7 @@ adminRouter.get('/requests/:id/whatsapp', (req, res) => {
     reject: 'mensagem de recusa',
     reschedule: 'mensagem de remarcação',
   };
-  logActivity(req, row.id, 'whatsapp', rotulos[kind] || rotulos.confirm);
+  await logActivity(req, row.id, 'whatsapp', rotulos[kind] || rotulos.confirm);
   // O telefone vai separado: a tela monta o link conforme o aparelho
   // (celular abre o app; no computador vai para o WhatsApp Web, que preserva os emojis).
   res.json({ message, phone: waPhone(row.whatsapp), link: waLink(row.whatsapp, message) });
@@ -360,7 +360,7 @@ adminRouter.get('/requests/:id/whatsapp', (req, res) => {
 /* ------------------------------ exportação ------------------------------ */
 
 adminRouter.get('/export.xlsx', async (req, res) => {
-  const rows = queryRequests(req.query as Filters);
+  const rows = await queryRequests(req.query as Filters);
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Agenda 5588';
   const ws = wb.addWorksheet('Solicitações', { views: [{ state: 'frozen', ySplit: 1 }] });
@@ -427,13 +427,13 @@ adminRouter.get('/export.xlsx', async (req, res) => {
 
 /* ------------------------------ configurações ------------------------------ */
 
-adminRouter.get('/settings', requireRole('admin'), (_req, res) => {
-  const s = getSettings();
+adminRouter.get('/settings', requireRole('admin'), async (_req, res) => {
+  const s = await getSettings();
   const { google_tokens, ...rest } = s;
   res.json({
     ...rest,
     google_client_secret: s.google_client_secret ? '********' : '',
-    google_connected: gcal.isConnected(),
+    google_connected: await gcal.isConnected(),
     google_redirect_uri: gcal.redirectUri(),
   });
 });
@@ -456,26 +456,30 @@ const settingsSchema = z.object({
   timezone: z.string().max(60).optional(),
 });
 
-adminRouter.put('/settings', requireRole('admin'), (req, res) => {
+adminRouter.put('/settings', requireRole('admin'), async (req, res) => {
   const parsed = settingsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Configuração inválida' });
   const patch = { ...parsed.data } as Record<string, string>;
   if (patch.google_client_secret === '********') delete patch.google_client_secret;
-  setSettings(patch);
+  await setSettings(patch);
   res.json({ ok: true });
 });
 
 /* ------------------------------ upload ------------------------------ */
 
+// Em serverless o arquivo fica em memoria e vai para o Vercel Blob;
+// no modo local continua indo para o disco, como sempre foi.
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, env.uploadsDir),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase().slice(0, 6) || '.jpg';
-      const kind = (_req.params as { kind?: string }).kind === 'header' ? 'header' : 'bg';
-      cb(null, `${kind}-${Date.now()}${ext}`);
-    },
-  }),
+  storage: env.serverless
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, env.uploadsDir),
+        filename: (_req, file, cb) => {
+          const ext = path.extname(file.originalname).toLowerCase().slice(0, 6) || '.jpg';
+          const kind = (_req.params as { kind?: string }).kind === 'header' ? 'header' : 'bg';
+          cb(null, `${kind}-${Date.now()}${ext}`);
+        },
+      }),
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)),
 });
@@ -485,28 +489,47 @@ const UPLOAD_TARGETS: Record<string, string> = {
   header: 'form_header_image_url',
 };
 
-adminRouter.post('/upload/:kind', requireRole('admin'), upload.single('file'), (req, res) => {
+adminRouter.post('/upload/:kind', requireRole('admin'), upload.single('file'), async (req, res) => {
   const setting = UPLOAD_TARGETS[req.params.kind];
   if (!setting) return res.status(400).json({ error: 'Tipo de imagem inválido' });
   if (!req.file) return res.status(400).json({ error: 'Envie uma imagem JPG, PNG ou WEBP de até 8MB' });
-  const url = `/uploads/${req.file.filename}`;
-  setSettings({ [setting]: url });
+
+  let url: string;
+  if (env.serverless) {
+    const { put } = await import('@vercel/blob');
+    const ext = path.extname(req.file.originalname).toLowerCase().slice(0, 6) || '.jpg';
+    const kind = req.params.kind === 'header' ? 'header' : 'bg';
+    const blob = await put(`agenda5588/${kind}-${Date.now()}${ext}`, req.file.buffer, {
+      access: 'public',
+      contentType: req.file.mimetype,
+    });
+    url = blob.url;
+  } else {
+    url = `/uploads/${req.file.filename}`;
+  }
+
+  await setSettings({ [setting]: url });
   res.json({ url });
 });
 
-adminRouter.get('/uploads', requireRole('admin'), (_req, res) => {
+adminRouter.get('/uploads', requireRole('admin'), async (_req, res) => {
+  if (env.serverless) {
+    const { list } = await import('@vercel/blob');
+    const blobs = await list({ prefix: 'agenda5588/' });
+    return res.json({ files: blobs.blobs.map((b) => b.url) });
+  }
   const files = fs.existsSync(env.uploadsDir) ? fs.readdirSync(env.uploadsDir) : [];
   res.json({ files: files.map((f) => `/uploads/${f}`) });
 });
 
 /* ------------------------------ histórico ------------------------------ */
 
-adminRouter.get('/activity', (req, res) => {
+adminRouter.get('/activity', async (req, res) => {
   const requestId = String(req.query.request_id || '');
   const rows = requestId
-    ? db
+    ? await db
         .prepare('SELECT * FROM activity_log WHERE request_id = ? ORDER BY id DESC LIMIT 200')
         .all(requestId)
-    : db.prepare('SELECT * FROM activity_log ORDER BY id DESC LIMIT 200').all();
+    : await db.prepare('SELECT * FROM activity_log ORDER BY id DESC LIMIT 200').all();
   res.json({ items: rows });
 });

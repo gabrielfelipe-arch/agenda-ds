@@ -75,34 +75,34 @@ export function verifyToken(token: string): AuthPayload | null {
   }
 }
 
-export function findUserByEmail(email: string): UserRow | undefined {
-  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email.trim()) as UserRow | undefined;
+export function findUserByEmail(email: string): Promise<UserRow | undefined> {
+  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get<UserRow>(email.trim());
 }
 
-export function findUserById(id: string): UserRow | undefined {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
+export function findUserById(id: string): Promise<UserRow | undefined> {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get<UserRow>(id);
 }
 
 /** Cria o administrador inicial a partir das variáveis de ambiente, se ainda não houver usuários. */
-export function seedAdminUser() {
-  const count = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
-  if (count > 0) return;
+export async function seedAdminUser() {
+  const row = await db.prepare('SELECT COUNT(*) AS n FROM users').get<{ n: number }>();
+  if ((row?.n ?? 0) > 0) return;
   const now = new Date().toISOString();
-  db.prepare(
+  await db.prepare(
     `INSERT INTO users (id, name, email, password_hash, role, active, created_at)
      VALUES (?, ?, ?, ?, 'admin', 1, ?)`
   ).run(crypto.randomUUID(), 'Administrador', env.adminEmail.toLowerCase(), hashPassword(env.adminPassword), now);
   console.log(`[auth] usuário administrador inicial criado: ${env.adminEmail}`);
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   // O token só é aceito pelo cabeçalho Authorization: nunca por querystring
   // (evita vazamento por logs de acesso, histórico do navegador e Referer).
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   const payload = token ? verifyToken(token) : null;
   if (!payload) return res.status(401).json({ error: 'Sessão expirada. Faça login novamente.' });
-  const user = findUserById(payload.sub);
+  const user = await findUserById(payload.sub);
   if (!user || !user.active) return res.status(401).json({ error: 'Usuário inativo ou inexistente.' });
   (req as AuthedRequest).user = user;
   next();

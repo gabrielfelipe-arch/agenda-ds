@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import express from 'express';
+import 'express-async-errors';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env } from './env';
 import { seedAdminUser } from './auth';
-import { seedSettings } from './db';
+import { initSchema, seedSettings } from './db';
 import { publicRouter } from './routes/public';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
@@ -25,7 +26,7 @@ app.use(
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        imgSrc: ["'self'", 'data:', 'blob:'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.public.blob.vercel-storage.com'],
         connectSrc: ["'self'", 'https://viacep.com.br'],
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
@@ -100,15 +101,43 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Erro interno. Tente novamente.' });
 });
 
-seedSettings();
-seedAdminUser();
+/**
+ * Schema + cargas iniciais. Roda uma vez por processo; em serverless isso
+ * significa uma vez por cold start, o que e barato (tudo e idempotente).
+ */
+let ready: Promise<void> | null = null;
+export function ensureReady(): Promise<void> {
+  if (!ready) {
+    ready = (async () => {
+      await initSchema();
+      await seedSettings();
+      await seedAdminUser();
+    })().catch((e) => {
+      ready = null; // permite tentar de novo na proxima requisicao
+      throw e;
+    });
+  }
+  return ready;
+}
 
-app.listen(env.port, '0.0.0.0', () => {
-  console.log(`Agenda 5588 rodando em http://0.0.0.0:${env.port} (público: ${env.publicUrl})`);
-  if (env.jwtSecret === 'troque-este-segredo-em-producao') {
-    console.warn('[aviso] defina JWT_SECRET no .env antes de expor o sistema.');
-  }
-  if (env.adminPassword === 'admin123') {
-    console.warn('[aviso] defina ADMIN_PASSWORD no .env: a senha padrão está em uso.');
-  }
-});
+export { app };
+
+// Modo local/Docker: sobe o servidor HTTP. Na Vercel quem chama e api/index.ts.
+if (!process.env.VERCEL) {
+  ensureReady()
+    .then(() => {
+      app.listen(env.port, '0.0.0.0', () => {
+        console.log(`Agenda 5588 rodando em http://0.0.0.0:${env.port} (público: ${env.publicUrl})`);
+        if (env.jwtSecret === 'troque-este-segredo-em-producao') {
+          console.warn('[aviso] defina JWT_SECRET no .env antes de expor o sistema.');
+        }
+        if (env.adminPassword === 'admin123') {
+          console.warn('[aviso] defina ADMIN_PASSWORD no .env: a senha padrão está em uso.');
+        }
+      });
+    })
+    .catch((e) => {
+      console.error('[fatal] falha ao inicializar o banco:', e);
+      process.exit(1);
+    });
+}

@@ -6,7 +6,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from '@simplewebauthn/server';
-import { db } from '../db';
+import { db, putTransient, takeTransient } from '../db';
 import { env } from '../env';
 import {
   AuthedRequest,
@@ -38,18 +38,14 @@ function expectedOrigins(): string[] {
   return [...list];
 }
 
-/** Desafios ficam em memória: são de vida curtíssima (poucos segundos). */
-const challenges = new Map<string, { challenge: string; expires: number }>();
-
+/* Desafios vao para o banco: em serverless a verificacao pode cair em outra
+ * instancia, e um Map em memoria se perderia entre as duas requisicoes. */
 function putChallenge(key: string, challenge: string) {
-  challenges.set(key, { challenge, expires: Date.now() + 5 * 60_000 });
+  return putTransient(`wa:${key}`, challenge, 5 * 60_000);
 }
 
-function takeChallenge(key: string): string | null {
-  const entry = challenges.get(key);
-  challenges.delete(key);
-  if (!entry || entry.expires < Date.now()) return null;
-  return entry.challenge;
+function takeChallenge(key: string): Promise<string | null> {
+  return takeTransient(`wa:${key}`);
 }
 
 interface CredentialRow {
@@ -63,14 +59,14 @@ interface CredentialRow {
   last_used_at: string | null;
 }
 
-function credentialsOf(userId: string): CredentialRow[] {
+function credentialsOf(userId: string): Promise<CredentialRow[]> {
   return db
     .prepare('SELECT * FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at DESC')
-    .all(userId) as CredentialRow[];
+    .all<CredentialRow>(userId);
 }
 
-function touchLogin(user: UserRow) {
-  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+async function touchLogin(user: UserRow) {
+  await db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
 }
 
 /* ------------------------------- login ------------------------------- */
@@ -80,23 +76,23 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Informe a senha'),
 });
 
-authRouter.post('/login', (req, res) => {
+authRouter.post('/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-  const user = findUserByEmail(parsed.data.email);
+  const user = await findUserByEmail(parsed.data.email);
   if (!user || !checkPassword(parsed.data.password, user.password_hash)) {
     return res.status(401).json({ error: 'E-mail ou senha inválidos' });
   }
   if (!user.active) return res.status(403).json({ error: 'Usuário desativado. Procure um administrador.' });
 
-  touchLogin(user);
+  await touchLogin(user);
   res.json({ token: signToken(user), user: toPublicUser(user) });
 });
 
-authRouter.get('/me', requireAuth, (req, res) => {
+authRouter.get('/me', requireAuth, async (req, res) => {
   const user = (req as AuthedRequest).user!;
-  res.json({ user: toPublicUser(user), passkeys: credentialsOf(user.id).length });
+  res.json({ user: toPublicUser(user), passkeys: (await credentialsOf(user.id)).length });
 });
 
 const passwordSchema = z.object({
@@ -104,14 +100,14 @@ const passwordSchema = z.object({
   new_password: z.string().min(8, 'A nova senha deve ter ao menos 8 caracteres'),
 });
 
-authRouter.post('/change-password', requireAuth, (req, res) => {
+authRouter.post('/change-password', requireAuth, async (req, res) => {
   const user = (req as AuthedRequest).user!;
   const parsed = passwordSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   if (!checkPassword(parsed.data.current_password, user.password_hash)) {
     return res.status(400).json({ error: 'Senha atual incorreta' });
   }
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
+  await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
     hashPassword(parsed.data.new_password),
     user.id
   );
@@ -122,7 +118,7 @@ authRouter.post('/change-password', requireAuth, (req, res) => {
 
 authRouter.post('/webauthn/register/options', requireAuth, async (req, res) => {
   const user = (req as AuthedRequest).user!;
-  const existing = credentialsOf(user.id);
+  const existing = await credentialsOf(user.id);
   const options = await generateRegistrationOptions({
     rpName: env.rpName,
     rpID: rpID(),
@@ -140,7 +136,7 @@ authRouter.post('/webauthn/register/options', requireAuth, async (req, res) => {
       authenticatorAttachment: 'platform',
     },
   });
-  putChallenge(`reg:${user.id}`, options.challenge);
+  await putChallenge(`reg:${user.id}`, options.challenge);
   res.json(options);
 });
 
@@ -148,7 +144,7 @@ type AuthenticatorTransportLike = 'ble' | 'cable' | 'hybrid' | 'internal' | 'nfc
 
 authRouter.post('/webauthn/register/verify', requireAuth, async (req, res) => {
   const user = (req as AuthedRequest).user!;
-  const expectedChallenge = takeChallenge(`reg:${user.id}`);
+  const expectedChallenge = await takeChallenge(`reg:${user.id}`);
   if (!expectedChallenge) return res.status(400).json({ error: 'Desafio expirado. Tente novamente.' });
 
   try {
@@ -163,7 +159,7 @@ authRouter.post('/webauthn/register/verify', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Não foi possível validar a biometria' });
     }
     const { credential } = verification.registrationInfo;
-    db.prepare(
+    await db.prepare(
       `INSERT INTO webauthn_credentials (id, user_id, public_key, counter, transports, device_name, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET public_key = excluded.public_key, counter = excluded.counter`
@@ -176,7 +172,7 @@ authRouter.post('/webauthn/register/verify', requireAuth, async (req, res) => {
       String(req.body.device_name || 'Este dispositivo').slice(0, 60),
       new Date().toISOString()
     );
-    res.json({ ok: true, credentials: credentialsOf(user.id).map(publicCredential) });
+    res.json({ ok: true, credentials: (await credentialsOf(user.id)).map(publicCredential) });
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
   }
@@ -191,25 +187,25 @@ function publicCredential(c: CredentialRow) {
   };
 }
 
-authRouter.get('/webauthn/credentials', requireAuth, (req, res) => {
+authRouter.get('/webauthn/credentials', requireAuth, async (req, res) => {
   const user = (req as AuthedRequest).user!;
-  res.json({ items: credentialsOf(user.id).map(publicCredential) });
+  res.json({ items: (await credentialsOf(user.id)).map(publicCredential) });
 });
 
-authRouter.delete('/webauthn/credentials/:id', requireAuth, (req, res) => {
+authRouter.delete('/webauthn/credentials/:id', requireAuth, async (req, res) => {
   const user = (req as AuthedRequest).user!;
-  db.prepare('DELETE FROM webauthn_credentials WHERE id = ? AND user_id = ?').run(req.params.id, user.id);
-  res.json({ ok: true, items: credentialsOf(user.id).map(publicCredential) });
+  await db.prepare('DELETE FROM webauthn_credentials WHERE id = ? AND user_id = ?').run(req.params.id, user.id);
+  res.json({ ok: true, items: (await credentialsOf(user.id)).map(publicCredential) });
 });
 
 /* ---------------------- biometria: login (passkey) ---------------------- */
 
 authRouter.post('/webauthn/login/options', async (req, res) => {
   const email = String(req.body?.email || '').trim();
-  const user = email ? findUserByEmail(email) : undefined;
+  const user = email ? await findUserByEmail(email) : undefined;
   if (!user || !user.active) return res.status(404).json({ error: 'Usuário não encontrado neste dispositivo' });
 
-  const creds = credentialsOf(user.id);
+  const creds = await credentialsOf(user.id);
   if (!creds.length) {
     return res.status(404).json({ error: 'Nenhuma biometria cadastrada para este usuário' });
   }
@@ -222,22 +218,22 @@ authRouter.post('/webauthn/login/options', async (req, res) => {
       transports: c.transports ? (JSON.parse(c.transports) as AuthenticatorTransportLike[]) : undefined,
     })),
   });
-  putChallenge(`auth:${user.id}`, options.challenge);
+  await putChallenge(`auth:${user.id}`, options.challenge);
   res.json(options);
 });
 
 authRouter.post('/webauthn/login/verify', async (req, res) => {
   const email = String(req.body?.email || '').trim();
-  const user = email ? findUserByEmail(email) : undefined;
+  const user = email ? await findUserByEmail(email) : undefined;
   if (!user || !user.active) return res.status(401).json({ error: 'Usuário inválido' });
 
-  const expectedChallenge = takeChallenge(`auth:${user.id}`);
+  const expectedChallenge = await takeChallenge(`auth:${user.id}`);
   if (!expectedChallenge) return res.status(400).json({ error: 'Desafio expirado. Tente novamente.' });
 
   const response = req.body.response;
-  const cred = db
+  const cred = await db
     .prepare('SELECT * FROM webauthn_credentials WHERE id = ? AND user_id = ?')
-    .get(String(response?.id || ''), user.id) as CredentialRow | undefined;
+    .get<CredentialRow>(String(response?.id || ''), user.id);
   if (!cred) return res.status(401).json({ error: 'Biometria não reconhecida' });
 
   try {
@@ -256,12 +252,12 @@ authRouter.post('/webauthn/login/verify', async (req, res) => {
     });
     if (!verification.verified) return res.status(401).json({ error: 'Biometria não validada' });
 
-    db.prepare('UPDATE webauthn_credentials SET counter = ?, last_used_at = ? WHERE id = ?').run(
+    await db.prepare('UPDATE webauthn_credentials SET counter = ?, last_used_at = ? WHERE id = ?').run(
       verification.authenticationInfo.newCounter,
       new Date().toISOString(),
       cred.id
     );
-    touchLogin(user);
+    await touchLogin(user);
     res.json({ token: signToken(user), user: toPublicUser(user) });
   } catch (e) {
     res.status(401).json({ error: (e as Error).message });
