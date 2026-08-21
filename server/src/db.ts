@@ -168,3 +168,35 @@ export function setSettings(patch: SettingsMap) {
   });
   tx(Object.entries(patch));
 }
+
+/**
+ * Carga inicial de configuracoes. Roda uma unica vez, quando o banco ainda nao
+ * tem nenhuma configuracao salva — assim uma implantacao nova ja sobe com o
+ * formulario e as mensagens prontos, sem ninguem ter que digitar de novo.
+ *
+ * O arquivo nao guarda segredos: credenciais e tokens do Google ficam de fora
+ * de proposito e sao configurados em cada ambiente.
+ */
+export function seedSettings() {
+  const total = (db.prepare('SELECT COUNT(*) AS n FROM settings').get() as { n: number }).n;
+  if (total > 0) return;
+
+  const candidatos = [
+    path.join(env.seedDir, 'settings.json'),
+    path.join(__dirname, '..', '..', 'seed', 'settings.json'),
+  ];
+  const arquivo = candidatos.find((f) => fs.existsSync(f));
+  if (!arquivo) return;
+
+  try {
+    const dados = JSON.parse(fs.readFileSync(arquivo, 'utf8')) as SettingsMap;
+    const validas = Object.fromEntries(
+      Object.entries(dados).filter(([k, v]) => k in DEFAULT_SETTINGS && typeof v === 'string')
+    );
+    if (!Object.keys(validas).length) return;
+    setSettings(validas);
+    console.log(`[seed] ${Object.keys(validas).length} configuracoes carregadas de ${arquivo}`);
+  } catch (e) {
+    console.warn('[seed] nao foi possivel ler o arquivo de carga inicial:', (e as Error).message);
+  }
+}

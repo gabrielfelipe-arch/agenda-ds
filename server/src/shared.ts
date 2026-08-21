@@ -70,6 +70,12 @@ export function formatDateBR(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Data de hoje no fuso do servidor (TZ do container), em AAAA-MM-DD. */
+export function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function weekdayBR(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'long' });

@@ -42,31 +42,6 @@ export function durationLabel(hours: number): string {
   return `${hours} hora${hours > 1 ? 's' : ''}`;
 }
 
-/**
- * Horários possíveis de chegada da equipe: de 15 em 15 minutos, indo de até
- * 4 horas antes do evento até o próprio horário de início. Só entram opções
- * válidas — o campo nativo de hora não consegue esconder as inválidas.
- */
-export function arrivalSlots(startTime: string, windowHours = 4): { value: string; label: string }[] {
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) return [];
-  const [h, m] = startTime.split(':').map(Number);
-  const inicio = h * 60 + m;
-  const slots: { value: string; label: string }[] = [];
-
-  for (let delta = windowHours * 60; delta >= 0; delta -= 15) {
-    const minutos = inicio - delta;
-    if (minutos < 0) continue;
-    const value = `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
-    let label: string;
-    if (delta === 0) label = `${value} — no mesmo horário do evento`;
-    else if (delta < 60) label = `${value} — ${delta} min antes`;
-    else if (delta % 60 === 0) label = `${value} — ${delta / 60}h antes`;
-    else label = `${value} — ${Math.floor(delta / 60)}h${delta % 60} antes`;
-    slots.push({ value, label });
-  }
-  return slots;
-}
-
 export function maskPhone(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : '';

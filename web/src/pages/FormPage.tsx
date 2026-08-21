@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type FormConfig } from '../api';
-import { DURATION_VALUES, Icon, arrivalSlots, durationLabel, maskCep, maskPhone, onlyDigits, todayISO } from '../ui';
+import { DURATION_VALUES, Icon, durationLabel, maskCep, maskPhone, onlyDigits, todayISO } from '../ui';
 
 interface FormData {
   requester_name: string;
@@ -89,15 +89,21 @@ export default function FormPage() {
   const set = <K extends keyof FormData>(key: K, value: FormData[K]) => {
     const normalized =
       typeof value === 'string' && UPPERCASE_FIELDS.has(key) ? (toUpper(value) as FormData[K]) : value;
-    setData((prev) => {
-      const next = { ...prev, [key]: normalized };
-      // Mudar o início invalida uma chegada que tenha ficado depois dele.
-      if (key === 'start_time' && next.arrival_time && next.arrival_time > String(normalized)) {
-        next.arrival_time = '';
+    setData((prev) => ({ ...prev, [key]: normalized }));
+    setErrors((prev) => {
+      const next = { ...prev, [key]: undefined };
+      // Avisa na hora se a chegada ficou depois do início — por digitação
+      // no próprio campo ou por mudança no horário do evento.
+      if (key === 'arrival_time' || key === 'start_time') {
+        const inicio = key === 'start_time' ? String(normalized) : data.start_time;
+        const chegada = key === 'arrival_time' ? String(normalized) : data.arrival_time;
+        next.arrival_time =
+          inicio && chegada && chegada > inicio
+            ? 'A chegada da equipe não pode ser depois do início do evento'
+            : undefined;
       }
       return next;
     });
-    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
   };
 
   const endTime = useMemo(
@@ -148,7 +154,7 @@ export default function FormPage() {
     if (!data.start_time) e.start_time = 'Informe o horário de início';
     if (!data.arrival_time) e.arrival_time = 'Informe o horário de chegada';
     else if (data.start_time && data.arrival_time > data.start_time)
-      e.arrival_time = 'A chegada deve ser antes ou no mesmo horário do início';
+      e.arrival_time = 'A chegada da equipe não pode ser depois do início do evento';
     if (data.street.trim().length < 3) e.street = 'Informe a rua / avenida';
     if (!data.number.trim()) e.number = 'Informe o número';
     if (data.city.trim().length < 2) e.city = 'Informe a cidade';
@@ -374,26 +380,18 @@ export default function FormPage() {
                 Horário de chegada da equipe<span className="req">*</span>
               </label>
               <span className="hint">
-                {data.start_time
-                  ? 'Quanto antes do evento a equipe deve chegar ao local.'
-                  : 'Informe primeiro o horário de início do evento.'}
+                Horário em que a equipe deve chegar ao local
+                {data.start_time ? `, no máximo até ${data.start_time}.` : '.'}
               </span>
-              <select
+              <input
                 id="chegada"
-                className={`select ${errors.arrival_time ? 'error' : ''}`}
+                type="time"
+                className={`input ${errors.arrival_time ? 'error' : ''}`}
                 value={data.arrival_time}
                 onChange={(e) => set('arrival_time', e.target.value)}
-                disabled={!data.start_time}
-              >
-                <option value="">
-                  {data.start_time ? 'Selecione…' : 'Escolha o horário de início primeiro'}
-                </option>
-                {arrivalSlots(data.start_time).map((slot) => (
-                  <option key={slot.value} value={slot.value}>
-                    {slot.label}
-                  </option>
-                ))}
-              </select>
+                max={data.start_time || undefined}
+                step={300}
+              />
               {errors.arrival_time && <span className="error-text">{errors.arrival_time}</span>}
             </div>
           </div>

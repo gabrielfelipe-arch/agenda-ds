@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, getSettings } from '../db';
-import { audienceOptions, onlyDigits, upper } from '../shared';
+import { audienceOptions, onlyDigits, todayISO, upper } from '../shared';
 
 export const publicRouter = Router();
 
@@ -62,6 +62,14 @@ publicRouter.post('/requests', (req, res) => {
 
   if (!audienceOptions().includes(d.audience)) {
     return res.status(400).json({ error: 'Público estimado inválido', field: 'audience' });
+  }
+
+  // Agenda so para frente: a validacao da tela e conveniencia, esta e a que vale.
+  if (d.event_date < todayISO()) {
+    return res.status(400).json({
+      error: 'A data do evento não pode ser no passado.',
+      field: 'event_date',
+    });
   }
 
   // A equipe nao pode chegar depois do inicio do evento.

@@ -27,6 +27,7 @@ RUN cd server && npm ci --omit=dev && npm cache clean --force
 
 COPY --from=api /app/server/dist ./server/dist
 COPY --from=web /app/web/dist ./web/dist
+COPY seed ./seed
 
 RUN mkdir -p /app/data /app/uploads && chown -R node:node /app
 USER node
@@ -34,6 +35,7 @@ USER node
 ENV DATA_DIR=/app/data
 ENV UPLOADS_DIR=/app/uploads
 ENV WEB_DIR=/app/web/dist
+ENV SEED_DIR=/app/seed
 ENV PORT=8080
 EXPOSE 8080
 

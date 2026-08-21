@@ -1,0 +1,11 @@
+{
+  "form_background_url": "/assets/candidatos.jpg",
+  "form_description": "Este formulário é destinado à solicitação de agendas e atividades públicas relacionadas às candidaturas de Daniel Soranz (5588), para deputado federal, e Eduardo Paes (55), para governador do Rio de Janeiro.\n\nAs solicitações serão analisadas, considerando a organização e a disponibilidade das agendas.\n\nO retorno será realizado pelo WhatsApp informado no momento da inscrição.\n\nO preenchimento deste formulário representa uma solicitação de agenda e não uma confirmação de realização.",
+  "form_open": "true",
+  "form_success_message": "Solicitação enviada com sucesso! Nossa equipe fará a análise e o retorno será feito pelo WhatsApp informado.",
+  "form_title": "SOLICITAÇÃO DE AGENDA - TODOS PELA SAÚDE",
+  "google_event_prefix": "[AGENDA 5588]",
+  "timezone": "America/Sao_Paulo",
+  "whatsapp_confirm_template": "✅ *AGENDA CONFIRMADA!*\n\nOlá, *{{nome}}*! 👋\nSua solicitação de agenda foi *CONFIRMADA*. 🎉\n\n🗓️ *Data:* {{data}}\n⏰ *Início:* {{hora}}\n⏳ *Duração:* {{duracao}}\n🚗 *Chegada da equipe:* {{chegada}}\n📍 *Local:* {{endereco}}\n👥 *Público estimado:* {{publico}}\n\n📝 *Pauta:* {{pauta}}\n\nContamos com você! Qualquer alteração, responda por aqui. 💙\n\n*Seu voto é + saúde para sua família* 💚\n*Daniel Soranz 5588* | *Eduardo Paes 55*",
+  "whatsapp_reject_template": "Olá, *{{nome}}*! 👋\n\nAgradecemos muito o seu convite para o dia *{{data}}*. 🙏\n\nInfelizmente, não será possível confirmar essa agenda devido à disponibilidade do cronograma. 😔\n\nSeguimos à disposição para novas oportunidades!\n\n*Daniel Soranz 5588* | *Eduardo Paes 55* 💙"
+}

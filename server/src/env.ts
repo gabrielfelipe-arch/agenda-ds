@@ -11,6 +11,7 @@ export const env = {
   dataDir: process.env.DATA_DIR || path.join(root, 'data'),
   uploadsDir: process.env.UPLOADS_DIR || path.join(root, 'uploads'),
   webDir: process.env.WEB_DIR || path.join(root, 'web', 'dist'),
+  seedDir: process.env.SEED_DIR || path.join(root, 'seed'),
   jwtSecret: process.env.JWT_SECRET || 'troque-este-segredo-em-producao',
   adminEmail: (process.env.ADMIN_EMAIL || 'admin@agenda5588.local').toLowerCase(),
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123',

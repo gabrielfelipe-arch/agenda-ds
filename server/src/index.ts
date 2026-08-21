@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env } from './env';
 import { seedAdminUser } from './auth';
+import { seedSettings } from './db';
 import { publicRouter } from './routes/public';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
@@ -99,6 +100,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Erro interno. Tente novamente.' });
 });
 
+seedSettings();
 seedAdminUser();
 
 app.listen(env.port, '0.0.0.0', () => {
