@@ -25,7 +25,7 @@ const createSchema = z.object({
   whatsapp: z.string().trim().min(10, 'WhatsApp inválido').max(20),
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida'),
   start_time: z.string().regex(timeRe, 'Horário inválido'),
-  duration_hours: z.union([z.literal(1), z.literal(2)]),
+  duration_hours: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   arrival_time: z.string().regex(timeRe, 'Horário de chegada inválido'),
   cep: z.string().trim().max(12).optional().default(''),
   street: z.string().trim().min(3, 'Informe o endereço').max(200),
@@ -62,6 +62,14 @@ publicRouter.post('/requests', (req, res) => {
 
   if (!audienceOptions().includes(d.audience)) {
     return res.status(400).json({ error: 'Público estimado inválido', field: 'audience' });
+  }
+
+  // A equipe nao pode chegar depois do inicio do evento.
+  if (d.arrival_time > d.start_time) {
+    return res.status(400).json({
+      error: 'O horário de chegada da equipe deve ser anterior ou igual ao início do evento.',
+      field: 'arrival_time',
+    });
   }
 
   const whatsapp = onlyDigits(d.whatsapp);

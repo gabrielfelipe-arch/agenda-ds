@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type CalendarEvent } from '../api';
-import { Icon, Modal, formatDateBR, useToast, weekdayLong } from '../ui';
+import { Icon, Modal, formatDateBR, useToast, weekdayLong, whatsappUrl } from '../ui';
 
 type View = 'mes' | 'lista' | 'semana';
 type Source = 'local' | 'google';
@@ -308,7 +308,7 @@ function AgendaItem({ e, onPick }: { e: CalendarEvent; onPick: (e: CalendarEvent
 
 function EventModal({ event, onClose }: { event: CalendarEvent; onClose: () => void }) {
   const whats = event.whatsapp
-    ? `https://wa.me/${event.whatsapp.length <= 11 ? '55' : ''}${event.whatsapp}`
+    ? whatsappUrl(event.whatsapp.length <= 11 ? `55${event.whatsapp}` : event.whatsapp, '')
     : '';
   return (
     <Modal

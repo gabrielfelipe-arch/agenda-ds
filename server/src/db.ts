@@ -120,6 +120,25 @@ Infelizmente, não será possível confirmar essa agenda devido à disponibilida
 Seguimos à disposição para novas oportunidades!
 
 *Daniel Soranz 5588* | *Eduardo Paes 55* 💙`,
+  whatsapp_reschedule_template: `\u{1F504} *AGENDA REMARCADA*
+
+Ol\u00e1, *{{nome}}*! \u{1F44B}
+Conforme combinamos, sua agenda foi *remarcada*. \u2705
+
+\u{1F5D3}\ufe0f *Nova data:* {{data}}
+\u23f0 *In\u00edcio:* {{hora}}
+\u23f3 *Dura\u00e7\u00e3o:* {{duracao}}
+\u{1F697} *Chegada da equipe:* {{chegada}}
+\u{1F4CD} *Local:* {{endereco}}
+\u{1F465} *P\u00fablico estimado:* {{publico}}
+
+\u{1F4DD} *Pauta:* {{pauta}}
+
+Nos vemos l\u00e1! \u{1F499}
+
+*Seu voto \u00e9 + sa\u00fade para sua fam\u00edlia* \u{1F49A}
+*Daniel Soranz 5588* | *Eduardo Paes 55*`,
+  whatsapp_emojis: 'auto',
   google_client_id: '',
   google_client_secret: '',
   google_calendar_id: 'primary',

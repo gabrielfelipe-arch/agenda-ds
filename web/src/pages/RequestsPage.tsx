@@ -4,16 +4,21 @@ import { useAuth } from '../auth';
 import {
   Icon,
   Modal,
+  DURATION_VALUES,
   MultiSelect,
   StatusBadge,
   addHours,
+  durationLabel,
   formatAddress,
   formatDateBR,
   formatDateTimeBR,
   formatStreetLine,
   maskPhone,
   useToast,
+  isMobileDevice,
+  waPhone,
   weekdayLong,
+  whatsappUrl,
   type MultiOption,
 } from '../ui';
 
@@ -79,13 +84,13 @@ export function countActiveFilters(f: Filters): number {
   );
 }
 
-type WaKind = 'confirm' | 'reject';
+type WaKind = 'confirm' | 'reject' | 'reschedule';
 
 interface WaPreview {
   item: AgendaRequest;
   kind: WaKind;
   message: string;
-  link: string;
+  phone: string;
 }
 
 export default function RequestsPage() {
@@ -96,7 +101,8 @@ export default function RequestsPage() {
   const [selected, setSelected] = useState<AgendaRequest | null>(null);
   const [options, setOptions] = useState<FilterOptions>(EMPTY_OPTIONS);
   const [waPreview, setWaPreview] = useState<WaPreview | null>(null);
-  const [waLoadingId, setWaLoadingId] = useState<string | null>(null);
+  const [, setWaLoadingId] = useState<string | null>(null);
+  const [reschedule, setReschedule] = useState<AgendaRequest | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,10 +144,13 @@ export default function RequestsPage() {
   const openWhats = useCallback(async (item: AgendaRequest, kind: WaKind = 'confirm') => {
     setWaLoadingId(item.id);
     try {
-      const res = await api.get<{ message: string; link: string }>(
-        `/admin/requests/${item.id}/whatsapp?kind=${kind}`
+      // No computador a mensagem abre no WhatsApp Web: pedimos a versao sem emojis
+      // quando as configuracoes estiverem no modo automatico.
+      const plain = isMobileDevice() ? '' : '&plain=1';
+      const res = await api.get<{ message: string; phone: string }>(
+        `/admin/requests/${item.id}/whatsapp?kind=${kind}${plain}`
       );
-      setWaPreview({ item, kind, ...res });
+      setWaPreview({ item, kind, message: res.message, phone: res.phone });
     } catch (e) {
       toast.err((e as Error).message);
     } finally {
@@ -216,7 +225,7 @@ export default function RequestsPage() {
         </div>
       ) : (
         <>
-          <div className="table-wrap">
+          <div className="table-wrap table-viewport" style={{ maxHeight: 'calc(100dvh - 430px)' }}>
             <table>
               <thead>
                 <tr>
@@ -265,14 +274,23 @@ export default function RequestsPage() {
                     </td>
                     <td>
                       <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-                        <button
+                        <a
                           className="btn btn-whats btn-sm btn-icon"
-                          onClick={() => void openWhats(r)}
-                          disabled={waLoadingId === r.id}
-                          title={`Falar com ${r.requester_name} no WhatsApp`}
-                          aria-label={`Falar com ${r.requester_name} no WhatsApp`}
+                          href={whatsappUrl(waPhone(r.whatsapp), '')}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Conversar com ${r.requester_name} no WhatsApp`}
+                          aria-label={`Conversar com ${r.requester_name} no WhatsApp`}
                         >
-                          {waLoadingId === r.id ? <div className="spinner dark" /> : <Icon.Whats />}
+                          <Icon.Whats />
+                        </a>
+                        <button
+                          className="btn btn-ghost btn-sm btn-icon"
+                          onClick={() => setReschedule(r)}
+                          title="Reagendar"
+                          aria-label={`Reagendar ${r.protocol}`}
+                        >
+                          <Icon.Reschedule />
                         </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setSelected(r)}>
                           <Icon.Eye />
@@ -323,14 +341,23 @@ export default function RequestsPage() {
                   </span>
                 </div>
                 <div className="row-actions">
-                  <button
+                  <a
                     className="btn btn-whats btn-sm btn-icon"
-                    onClick={() => void openWhats(r)}
-                    disabled={waLoadingId === r.id}
-                    title={`Falar com ${r.requester_name} no WhatsApp`}
-                    aria-label={`Falar com ${r.requester_name} no WhatsApp`}
+                    href={whatsappUrl(waPhone(r.whatsapp), '')}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`Conversar com ${r.requester_name} no WhatsApp`}
+                    aria-label={`Conversar com ${r.requester_name} no WhatsApp`}
                   >
-                    {waLoadingId === r.id ? <div className="spinner dark" /> : <Icon.Whats />}
+                    <Icon.Whats />
+                  </a>
+                  <button
+                    className="btn btn-ghost btn-sm btn-icon"
+                    onClick={() => setReschedule(r)}
+                    title="Reagendar"
+                    aria-label={`Reagendar ${r.protocol}`}
+                  >
+                    <Icon.Reschedule />
                   </button>
                   <button className="btn btn-ghost btn-sm" style={{ flex: 1 }} onClick={() => setSelected(r)}>
                     <Icon.Eye />
@@ -349,9 +376,22 @@ export default function RequestsPage() {
           onClose={() => setSelected(null)}
           onChanged={upsert}
           onWhats={openWhats}
+          onReschedule={setReschedule}
           onDeleted={(id) => {
             setItems((prev) => prev.filter((i) => i.id !== id));
             setSelected(null);
+          }}
+        />
+      )}
+
+      {reschedule && (
+        <RescheduleModal
+          item={reschedule}
+          onClose={() => setReschedule(null)}
+          onSaved={(updated, avisar) => {
+            upsert(updated);
+            setReschedule(null);
+            if (avisar) void openWhats(updated, 'reschedule');
           }}
         />
       )}
@@ -557,11 +597,18 @@ function WhatsAppModal({
   onSwitchKind: (kind: WaKind) => void;
 }) {
   const toast = useToast();
-  const { item, kind, message, link } = preview;
+  const { item, kind, message, phone } = preview;
+  const link = whatsappUrl(phone, message);
 
   return (
     <Modal
-      title={kind === 'confirm' ? 'Mensagem de confirmação' : 'Mensagem de retorno'}
+      title={
+        kind === 'confirm'
+          ? 'Mensagem de confirmação'
+          : kind === 'reschedule'
+            ? 'Mensagem de remarcação'
+            : 'Mensagem de retorno'
+      }
       onClose={onClose}
       footer={
         <>
@@ -590,6 +637,9 @@ function WhatsAppModal({
         <button className={kind === 'confirm' ? 'active' : ''} onClick={() => onSwitchKind('confirm')}>
           Confirmação
         </button>
+        <button className={kind === 'reschedule' ? 'active' : ''} onClick={() => onSwitchKind('reschedule')}>
+          Remarcação
+        </button>
         <button className={kind === 'reject' ? 'active' : ''} onClick={() => onSwitchKind('reject')}>
           Recusa
         </button>
@@ -606,12 +656,14 @@ function RequestModal({
   onChanged,
   onDeleted,
   onWhats,
+  onReschedule,
 }: {
   item: AgendaRequest;
   onClose: () => void;
   onChanged: (r: AgendaRequest) => void;
   onDeleted: (id: string) => void;
   onWhats: (item: AgendaRequest, kind?: WaKind) => Promise<void>;
+  onReschedule: (item: AgendaRequest) => void;
 }) {
   const toast = useToast();
   const { can } = useAuth();
@@ -679,9 +731,20 @@ function RequestModal({
             </button>
           )}
           <div style={{ flex: 1 }} />
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              onClose();
+              onReschedule(item);
+            }}
+            disabled={busy}
+          >
+            <Icon.Reschedule />
+            Reagendar
+          </button>
           <button className="btn btn-whats" onClick={() => void onWhats(item)} disabled={busy}>
             <Icon.Whats />
-            WhatsApp
+            Mensagem
           </button>
           {item.status !== 'confirmado' && (
             <button className="btn btn-primary" onClick={() => void changeStatus('confirmado')} disabled={busy}>
@@ -708,7 +771,7 @@ function RequestModal({
         <Detail k="Início" v={item.start_time} />
         <Detail
           k="Duração"
-          v={`${item.duration_hours}h — término ${addHours(item.start_time, item.duration_hours)}`}
+          v={`${durationLabel(item.duration_hours)} — término ${addHours(item.start_time, item.duration_hours)}`}
         />
         <Detail k="Chegada da equipe" v={item.arrival_time} />
         <Detail k="Público estimado" v={item.audience} />
@@ -770,5 +833,154 @@ function Detail({ k, v }: { k: string; v: string }) {
       <div className="k">{k}</div>
       <div className="v">{v}</div>
     </div>
+  );
+}
+
+
+/* --------------------------- reagendamento --------------------------- */
+
+function RescheduleModal({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: AgendaRequest;
+  onClose: () => void;
+  onSaved: (updated: AgendaRequest, avisar: boolean) => void;
+}) {
+  const toast = useToast();
+  const [date, setDate] = useState(item.event_date);
+  const [start, setStart] = useState(item.start_time);
+  const [arrival, setArrival] = useState(item.arrival_time);
+  const [duration, setDuration] = useState<number>(item.duration_hours || 1);
+  const [confirmar, setConfirmar] = useState(item.status !== 'confirmado');
+  const [busy, setBusy] = useState(false);
+
+  const mudou = date !== item.event_date || start !== item.start_time;
+  const jaConfirmada = item.status === 'confirmado' || item.status === 'realizado';
+
+  async function salvar(avisar: boolean) {
+    if (arrival > start) {
+      toast.err('A chegada da equipe deve ser antes ou no mesmo horário do início.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const payload: Record<string, unknown> = {
+        event_date: date,
+        start_time: start,
+        arrival_time: arrival,
+        duration_hours: duration,
+      };
+      if (confirmar && !jaConfirmada) payload.status = 'confirmado';
+
+      const res = await api.patch<{ item: AgendaRequest; warnings: string[] }>(
+        `/admin/requests/${item.id}`,
+        payload
+      );
+      res.warnings?.forEach((w) => toast.err(w));
+      toast.ok(mudou ? 'Agenda reagendada.' : 'Horários atualizados.');
+      onSaved(res.item, avisar);
+    } catch (e) {
+      toast.err((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Reagendar · ${item.requester_name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button className="btn btn-ghost" onClick={() => void salvar(false)} disabled={busy}>
+            Salvar sem avisar
+          </button>
+          <button className="btn btn-whats" onClick={() => void salvar(true)} disabled={busy}>
+            {busy ? <div className="spinner dark" /> : <Icon.Whats />}
+            Salvar e enviar mensagem
+          </button>
+        </>
+      }
+    >
+      <div className="alert alert-warn" style={{ marginBottom: 16 }}>
+        <strong>Data atual:</strong> {formatDateBR(item.event_date)} ({weekdayLong(item.event_date)}) às{' '}
+        {item.start_time} · <StatusBadge status={item.status} />
+      </div>
+
+      <div className="field">
+        <label className="label">Nova data</label>
+        <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        {date && <span className="hint">{weekdayLong(date)}</span>}
+      </div>
+
+      <div className="field">
+        <div className="grid-2 keep">
+          <div className="field">
+            <label className="label">Horário de início</label>
+            <input
+              className="input"
+              type="time"
+              step={300}
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label className="label">Chegada da equipe</label>
+            <input
+              className="input"
+              type="time"
+              step={300}
+              value={arrival}
+              onChange={(e) => setArrival(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="label">Duração</label>
+        <div className="chips">
+          {DURATION_VALUES.map((h) => (
+            <button
+              key={h}
+              type="button"
+              className="chip"
+              aria-pressed={duration === h}
+              onClick={() => setDuration(h)}
+            >
+              {durationLabel(h)}
+            </button>
+          ))}
+        </div>
+        {start && (
+          <span className="hint">
+            Término previsto às <strong>{addHours(start, duration)}</strong>.
+          </span>
+        )}
+      </div>
+
+      {!jaConfirmada && (
+        <div className="field">
+          <label className="switch">
+            <input type="checkbox" checked={confirmar} onChange={(e) => setConfirmar(e.target.checked)} />
+            <span>Confirmar a agenda nesta nova data</span>
+          </label>
+          <span className="hint">
+            Ao confirmar, o evento entra no Google Agenda automaticamente (se a conta estiver conectada).
+          </span>
+        </div>
+      )}
+
+      {jaConfirmada && (
+        <div className="alert alert-ok">
+          Esta agenda já está confirmada — ao salvar, o evento no Google Agenda é atualizado para a nova data.
+        </div>
+      )}
+    </Modal>
   );
 }

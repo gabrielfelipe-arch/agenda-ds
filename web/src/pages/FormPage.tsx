@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type FormConfig } from '../api';
-import { Icon, maskCep, maskPhone, onlyDigits, todayISO } from '../ui';
+import { DURATION_VALUES, Icon, arrivalSlots, durationLabel, maskCep, maskPhone, onlyDigits, todayISO } from '../ui';
 
 interface FormData {
   requester_name: string;
   whatsapp: string;
   event_date: string;
   start_time: string;
-  duration_hours: 1 | 2;
+  duration_hours: number;
   arrival_time: string;
   cep: string;
   street: string;
@@ -89,7 +89,14 @@ export default function FormPage() {
   const set = <K extends keyof FormData>(key: K, value: FormData[K]) => {
     const normalized =
       typeof value === 'string' && UPPERCASE_FIELDS.has(key) ? (toUpper(value) as FormData[K]) : value;
-    setData((prev) => ({ ...prev, [key]: normalized }));
+    setData((prev) => {
+      const next = { ...prev, [key]: normalized };
+      // Mudar o início invalida uma chegada que tenha ficado depois dele.
+      if (key === 'start_time' && next.arrival_time && next.arrival_time > String(normalized)) {
+        next.arrival_time = '';
+      }
+      return next;
+    });
     setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
   };
 
@@ -335,38 +342,58 @@ export default function FormPage() {
                 Duração<span className="req">*</span>
               </label>
               <div className="chips">
-                {[1, 2].map((h) => (
+                {DURATION_VALUES.map((h) => (
                   <button
                     key={h}
                     type="button"
                     className="chip"
                     aria-pressed={data.duration_hours === h}
-                    onClick={() => set('duration_hours', h as 1 | 2)}
+                    onClick={() => set('duration_hours', h)}
                   >
-                    {h} hora{h > 1 ? 's' : ''}
+                    {durationLabel(h)}
                   </button>
                 ))}
               </div>
               {endTime && (
                 <span className="hint">
-                  Término previsto às <strong>{endTime}</strong>.
+                  {data.duration_hours >= 4 ? (
+                    <>
+                      Término a combinar — a equipe reserva a partir das <strong>{endTime}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Término previsto às <strong>{endTime}</strong>.
+                    </>
+                  )}
                 </span>
               )}
             </div>
 
             <div className="field">
               <label className="label" htmlFor="chegada">
-                Horário para chegada<span className="req">*</span>
+                Horário de chegada da equipe<span className="req">*</span>
               </label>
-              <span className="hint">Horário em que a equipe deve chegar ao local.</span>
-              <input
+              <span className="hint">
+                {data.start_time
+                  ? 'Quanto antes do evento a equipe deve chegar ao local.'
+                  : 'Informe primeiro o horário de início do evento.'}
+              </span>
+              <select
                 id="chegada"
-                type="time"
-                className={`input ${errors.arrival_time ? 'error' : ''}`}
+                className={`select ${errors.arrival_time ? 'error' : ''}`}
                 value={data.arrival_time}
                 onChange={(e) => set('arrival_time', e.target.value)}
-                step={300}
-              />
+                disabled={!data.start_time}
+              >
+                <option value="">
+                  {data.start_time ? 'Selecione…' : 'Escolha o horário de início primeiro'}
+                </option>
+                {arrivalSlots(data.start_time).map((slot) => (
+                  <option key={slot.value} value={slot.value}>
+                    {slot.label}
+                  </option>
+                ))}
+              </select>
               {errors.arrival_time && <span className="error-text">{errors.arrival_time}</span>}
             </div>
           </div>

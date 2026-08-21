@@ -1,7 +1,7 @@
 import { auth as gauth, calendar as calendarApi, calendar_v3 } from '@googleapis/calendar';
 import { getSettings, setSettings } from '../db';
 import { env } from '../env';
-import { RequestRow, addHours, formatAddress } from '../shared';
+import { RequestRow, addHours, durationLabel, formatAddress } from '../shared';
 
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
@@ -112,7 +112,7 @@ function buildEventBody(r: RequestRow): calendar_v3.Schema$Event {
       `Solicitante: ${r.requester_name}`,
       `WhatsApp: ${r.whatsapp}`,
       `Chegada da equipe: ${r.arrival_time}`,
-      `Duração: ${r.duration_hours}h`,
+      `Duração: ${durationLabel(r.duration_hours)}`,
       `Público estimado: ${r.audience}`,
       '',
       'Pauta / briefing:',

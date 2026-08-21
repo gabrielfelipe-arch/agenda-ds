@@ -12,6 +12,8 @@ interface Settings {
   form_open: string;
   whatsapp_confirm_template: string;
   whatsapp_reject_template: string;
+  whatsapp_reschedule_template: string;
+  whatsapp_emojis: string;
   google_client_id: string;
   google_client_secret: string;
   google_calendar_id: string;
@@ -359,12 +361,48 @@ function MessagesTab({ s, set }: { s: Settings; set: Setter }) {
       </div>
 
       <div className="card">
+        <div className="section-title">Emojis nas mensagens</div>
+        <p className="hint" style={{ marginBottom: 12 }}>
+          O aplicativo do WhatsApp no computador recebe o link pelo Windows em codificação
+          antiga e troca cada emoji por um caractere quebrado — acentos passam, emojis não.
+          No celular isso não acontece.
+        </p>
+        <div className="field">
+          <select
+            className="select"
+            value={s.whatsapp_emojis || 'auto'}
+            onChange={(e) => set('whatsapp_emojis', e.target.value)}
+          >
+            <option value="auto">Automático — com emojis no celular, sem emojis no computador</option>
+            <option value="always">Sempre com emojis</option>
+            <option value="never">Nunca usar emojis</option>
+          </select>
+          <span className="hint">
+            Os modelos abaixo continuam guardados com os emojis; a remoção acontece só na hora do envio.
+          </span>
+        </div>
+      </div>
+
+      <div className="card">
         <div className="section-title">Mensagem de confirmação</div>
         <textarea
           className="textarea"
           rows={16}
           value={s.whatsapp_confirm_template}
           onChange={(e) => set('whatsapp_confirm_template', e.target.value)}
+        />
+      </div>
+
+      <div className="card">
+        <div className="section-title">Mensagem de remarcação</div>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          Enviada quando você reagenda uma solicitação. As variáveis já trazem a nova data e o novo horário.
+        </p>
+        <textarea
+          className="textarea"
+          rows={14}
+          value={s.whatsapp_reschedule_template}
+          onChange={(e) => set('whatsapp_reschedule_template', e.target.value)}
         />
       </div>
 

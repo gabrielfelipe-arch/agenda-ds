@@ -13,11 +13,15 @@ import {
   STATUS_LABELS,
   Status,
   addHours,
+  durationLabel,
   formatDateBR,
   onlyDigits,
   renderTemplate,
+  stripEmojis,
   upperFields,
   waLink,
+  weekdayBR,
+  waPhone,
 } from '../shared';
 import * as gcal from '../services/googleCalendar';
 
@@ -188,7 +192,7 @@ const updateSchema = z.object({
     .optional(),
   start_time: z.string().regex(timeRe).optional(),
   arrival_time: z.string().regex(timeRe).optional(),
-  duration_hours: z.union([z.literal(1), z.literal(2)]).optional(),
+  duration_hours: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
   cep: z.string().max(12).optional(),
   street: z.string().max(200).optional(),
   number: z.string().max(20).optional(),
@@ -217,6 +221,14 @@ adminRouter.patch('/requests/:id', async (req, res) => {
   if (data.whatsapp) data.whatsapp = onlyDigits(data.whatsapp);
   if (data.number) data.number = data.number.toUpperCase();
   if (data.cep) data.cep = onlyDigits(data.cep);
+
+  const inicio = data.start_time ?? current.start_time;
+  const chegada = data.arrival_time ?? current.arrival_time;
+  if (chegada > inicio) {
+    return res.status(400).json({
+      error: 'O horário de chegada da equipe deve ser anterior ou igual ao início do evento.',
+    });
+  }
 
   const keys = Object.keys(data) as (keyof typeof data)[];
   if (keys.length) {
@@ -256,6 +268,18 @@ adminRouter.patch('/requests/:id', async (req, res) => {
     } catch (e) {
       warnings.push(`Falha ao sincronizar com o Google Agenda: ${(e as Error).message}`);
     }
+  }
+
+  const remarcou =
+    (data.event_date && data.event_date !== current.event_date) ||
+    (data.start_time && data.start_time !== current.start_time);
+  if (remarcou) {
+    logActivity(
+      req,
+      updated.id,
+      'reagendamento',
+      `${formatDateBR(current.event_date)} ${current.start_time} -> ${formatDateBR(updated.event_date)} ${updated.start_time}`
+    );
   }
 
   if (data.status && data.status !== current.status) {
@@ -308,10 +332,29 @@ adminRouter.get('/requests/:id/whatsapp', (req, res) => {
   if (!row) return res.status(404).json({ error: 'Solicitação não encontrada' });
   const s = getSettings();
   const kind = String(req.query.kind || 'confirm');
-  const tpl = kind === 'reject' ? s.whatsapp_reject_template : s.whatsapp_confirm_template;
-  const message = renderTemplate(tpl, row);
-  logActivity(req, row.id, 'whatsapp', kind === 'reject' ? 'mensagem de recusa' : 'mensagem de confirmação');
-  res.json({ message, link: waLink(row.whatsapp, message) });
+  const templates: Record<string, string> = {
+    confirm: s.whatsapp_confirm_template,
+    reject: s.whatsapp_reject_template,
+    reschedule: s.whatsapp_reschedule_template,
+  };
+  const tpl = templates[kind] || s.whatsapp_confirm_template;
+  const rendered = renderTemplate(tpl, row);
+
+  // A tela informa `plain=1` quando o destino e o WhatsApp Web no computador.
+  // 'auto' (padrao): emojis no celular, texto limpo no computador.
+  const mode = s.whatsapp_emojis || 'auto';
+  const plainRequested = String(req.query.plain || '') === '1';
+  const semEmojis = mode === 'never' || (mode === 'auto' && plainRequested);
+  const message = semEmojis ? stripEmojis(rendered) : rendered;
+  const rotulos: Record<string, string> = {
+    confirm: 'mensagem de confirmação',
+    reject: 'mensagem de recusa',
+    reschedule: 'mensagem de remarcação',
+  };
+  logActivity(req, row.id, 'whatsapp', rotulos[kind] || rotulos.confirm);
+  // O telefone vai separado: a tela monta o link conforme o aparelho
+  // (celular abre o app; no computador vai para o WhatsApp Web, que preserva os emojis).
+  res.json({ message, phone: waPhone(row.whatsapp), link: waLink(row.whatsapp, message) });
 });
 
 /* ------------------------------ exportação ------------------------------ */
@@ -326,9 +369,10 @@ adminRouter.get('/export.xlsx', async (req, res) => {
     { header: 'Protocolo', key: 'protocol', width: 16 },
     { header: 'Status', key: 'status', width: 14 },
     { header: 'Data do evento', key: 'event_date', width: 16 },
+    { header: 'Dia da semana', key: 'weekday', width: 16 },
     { header: 'Início', key: 'start_time', width: 9 },
     { header: 'Término', key: 'end_time', width: 9 },
-    { header: 'Duração (h)', key: 'duration_hours', width: 12 },
+    { header: 'Duração', key: 'duration_label', width: 16 },
     { header: 'Chegada', key: 'arrival_time', width: 10 },
     { header: 'Solicitante', key: 'requester_name', width: 30 },
     { header: 'WhatsApp', key: 'whatsapp', width: 16 },
@@ -346,6 +390,7 @@ adminRouter.get('/export.xlsx', async (req, res) => {
     { header: 'Link Google Agenda', key: 'google_event_link', width: 30 },
     { header: 'Criado em', key: 'created_at', width: 20 },
     { header: 'Confirmado em', key: 'confirmed_at', width: 20 },
+    { header: 'Última alteração', key: 'updated_at', width: 20 },
   ];
 
   for (const r of rows) {
@@ -353,9 +398,12 @@ adminRouter.get('/export.xlsx', async (req, res) => {
       ...r,
       status: r.status.charAt(0).toUpperCase() + r.status.slice(1),
       event_date: formatDateBR(r.event_date),
+      weekday: weekdayBR(r.event_date),
+      duration_label: durationLabel(r.duration_hours),
       end_time: addHours(r.start_time, r.duration_hours),
       created_at: new Date(r.created_at).toLocaleString('pt-BR'),
       confirmed_at: r.confirmed_at ? new Date(r.confirmed_at).toLocaleString('pt-BR') : '',
+      updated_at: new Date(r.updated_at).toLocaleString('pt-BR'),
     });
   }
 
@@ -399,6 +447,8 @@ const settingsSchema = z.object({
   form_open: z.enum(['true', 'false']).optional(),
   whatsapp_confirm_template: z.string().max(4000).optional(),
   whatsapp_reject_template: z.string().max(4000).optional(),
+  whatsapp_reschedule_template: z.string().max(4000).optional(),
+  whatsapp_emojis: z.enum(['auto', 'always', 'never']).optional(),
   google_client_id: z.string().max(300).optional(),
   google_client_secret: z.string().max(300).optional(),
   google_calendar_id: z.string().max(300).optional(),

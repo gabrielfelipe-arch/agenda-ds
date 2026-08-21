@@ -10,10 +10,19 @@ export const STATUS_LABELS: Record<Status, string> = {
 };
 
 export function audienceOptions(): string[] {
+  // De 10 em 10 ate 100; acima disso as faixas ficam mais largas.
   const opts = ['De 5 a 10 pessoas'];
-  for (let i = 10; i < 200; i += 10) opts.push(`De ${i} a ${i + 10} pessoas`);
-  opts.push('Mais de 200 pessoas');
+  for (let i = 10; i < 100; i += 10) opts.push(`De ${i} a ${i + 10} pessoas`);
+  opts.push('De 100 a 150 pessoas', 'De 150 a 200 pessoas', 'Mais de 200 pessoas');
   return opts;
+}
+
+/** Durações aceitas. O valor 4 representa "mais de 3 horas". */
+export const DURATION_VALUES = [1, 2, 3, 4] as const;
+
+export function durationLabel(hours: number): string {
+  if (hours >= 4) return 'Mais de 3 horas';
+  return `${hours} hora${hours > 1 ? 's' : ''}`;
 }
 
 export interface RequestRow {
@@ -61,6 +70,11 @@ export function formatDateBR(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+export function weekdayBR(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('pt-BR', { weekday: 'long' });
+}
+
 export function addHours(time: string, hours: number): string {
   const [h, m] = time.split(':').map(Number);
   const total = h * 60 + m + hours * 60;
@@ -69,12 +83,28 @@ export function addHours(time: string, hours: number): string {
   return `${hh}:${mm}`;
 }
 
+/**
+ * Remove emojis e simbolos pictograficos, preservando acentuacao e a formatacao
+ * do WhatsApp (*negrito*, _italico_). Usado quando o destino nao lida bem com
+ * caracteres fora da codepage legada — caso do aplicativo desktop no Windows.
+ */
+export function stripEmojis(text: string): string {
+  return text
+    .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}️⃣]/gu, '')
+    .replace(/‍/g, '')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]{2,}/g, ' ').replace(/^[ \t]+/, '').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function renderTemplate(tpl: string, r: RequestRow): string {
   const map: Record<string, string> = {
     nome: r.requester_name,
     data: formatDateBR(r.event_date),
     hora: r.start_time,
-    duracao: `${r.duration_hours} hora${r.duration_hours > 1 ? 's' : ''}`,
+    duracao: durationLabel(r.duration_hours),
     chegada: r.arrival_time,
     endereco: formatAddress(r),
     publico: r.audience,
@@ -114,8 +144,12 @@ export function upperFields<T extends Record<string, unknown>>(data: T): T {
   return out;
 }
 
+/** Telefone só com dígitos e DDI do Brasil. */
+export function waPhone(whatsapp: string): string {
+  const digits = onlyDigits(whatsapp);
+  return digits.length <= 11 ? `55${digits}` : digits;
+}
+
 export function waLink(whatsapp: string, message: string): string {
-  let digits = onlyDigits(whatsapp);
-  if (digits.length <= 11) digits = `55${digits}`;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${waPhone(whatsapp)}?text=${encodeURIComponent(message)}`;
 }

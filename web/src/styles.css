@@ -699,10 +699,14 @@ a {
 
 .admin-main {
   flex: 1;
-  padding: 22px 24px 32px;
-  max-width: 1400px;
+  min-width: 0;
+  padding: 22px 26px 28px;
   width: 100%;
+  /* Telas largas: aproveita o espaço em vez de deixar faixas vazias nas laterais. */
+  max-width: 2100px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 900px) {
@@ -1773,4 +1777,70 @@ tbody tr:last-child td {
 .filter-chip button:hover {
   background: var(--navy);
   color: #fff;
+}
+
+/* Tabela completa do relatorio: primeira coluna fixa ao rolar na horizontal. */
+.table-full {
+  min-width: 2600px;
+}
+
+.table-full thead th:first-child,
+.table-full tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.table-full thead th:first-child {
+  z-index: 3;
+  background: var(--blue-50);
+}
+
+.table-full tbody tr:hover td:first-child {
+  background: #fafcff;
+}
+
+/* ---------------- tabela que ocupa a altura da janela ---------------- */
+
+.table-viewport {
+  flex: 1;
+  min-height: 260px;
+  /* Desconta cabeçalho da página, barra de filtros e respiro inferior. */
+  max-height: calc(100dvh - 290px);
+  overflow: auto;
+}
+
+.table-viewport thead th {
+  top: 0;
+}
+
+@media (max-width: 900px) {
+  .table-viewport {
+    max-height: none;
+  }
+}
+
+/* Colunas mais justas: cabe mais informação sem rolar tanto. */
+.table-full {
+  min-width: 0;
+  width: max-content;
+}
+
+.table-full th,
+.table-full td {
+  padding: 9px 12px;
+}
+
+.table-full td {
+  font-size: 0.84rem;
+}
+
+/* Resumo aproveita as colunas disponíveis em telas largas. */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  align-items: start;
 }

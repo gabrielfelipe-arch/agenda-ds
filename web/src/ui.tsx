@@ -34,6 +34,39 @@ export function addHours(time: string, hours: number): string {
   return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
+/** Durações aceitas. O valor 4 representa "mais de 3 horas". */
+export const DURATION_VALUES = [1, 2, 3, 4] as const;
+
+export function durationLabel(hours: number): string {
+  if (hours >= 4) return 'Mais de 3 horas';
+  return `${hours} hora${hours > 1 ? 's' : ''}`;
+}
+
+/**
+ * Horários possíveis de chegada da equipe: de 15 em 15 minutos, indo de até
+ * 4 horas antes do evento até o próprio horário de início. Só entram opções
+ * válidas — o campo nativo de hora não consegue esconder as inválidas.
+ */
+export function arrivalSlots(startTime: string, windowHours = 4): { value: string; label: string }[] {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) return [];
+  const [h, m] = startTime.split(':').map(Number);
+  const inicio = h * 60 + m;
+  const slots: { value: string; label: string }[] = [];
+
+  for (let delta = windowHours * 60; delta >= 0; delta -= 15) {
+    const minutos = inicio - delta;
+    if (minutos < 0) continue;
+    const value = `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+    let label: string;
+    if (delta === 0) label = `${value} — no mesmo horário do evento`;
+    else if (delta < 60) label = `${value} — ${delta} min antes`;
+    else if (delta % 60 === 0) label = `${value} — ${delta / 60}h antes`;
+    else label = `${value} — ${Math.floor(delta / 60)}h${delta % 60} antes`;
+    slots.push({ value, label });
+  }
+  return slots;
+}
+
 export function maskPhone(value: string): string {
   const d = value.replace(/\D/g, '').slice(0, 11);
   if (d.length <= 2) return d.length ? `(${d}` : '';
@@ -106,6 +139,27 @@ export function isMobileDevice(): boolean {
 
   const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
   return coarse && navigator.maxTouchPoints > 0;
+}
+
+/**
+ * Monta o link do WhatsApp conforme o aparelho.
+ *
+ * No Windows, abrir `wa.me` no desktop acaba caindo no protocolo `whatsapp://`, e o
+ * sistema entrega a URL ao aplicativo em codepage legada — acentos sobrevivem, emojis
+ * viram caractere de substituição. Mandando para o WhatsApp Web o texto fica no
+ * navegador, em UTF-8, e os emojis chegam intactos.
+ */
+/** Telefone só com dígitos e DDI do Brasil. */
+export function waPhone(whatsapp: string): string {
+  const d = onlyDigits(whatsapp);
+  return d.length <= 11 ? `55${d}` : d;
+}
+
+export function whatsappUrl(phone: string, message: string): string {
+  const text = encodeURIComponent(message);
+  return isMobileDevice()
+    ? `https://wa.me/${phone}?text=${text}`
+    : `https://web.whatsapp.com/send?phone=${phone}&text=${text}&type=phone_number&app_absent=0`;
 }
 
 /* -------------------------------- toasts -------------------------------- */
@@ -299,6 +353,13 @@ export const Icon = {
     <svg {...base} {...p}>
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  ),
+  Reschedule: (p: IconProps) => (
+    <svg {...base} {...p}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+      <path d="M9 16h5M12.5 13.5 15 16l-2.5 2.5" />
     </svg>
   ),
   Eye: (p: IconProps) => (
