@@ -362,7 +362,7 @@ export function Modal({
 }) {
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={wide ? { maxWidth: 900 } : undefined} role="dialog" aria-modal="true">
+      <div className="modal" style={wide ? { maxWidth: 'min(1140px, 96vw)' } : undefined} role="dialog" aria-modal="true">
         <div className="modal-head">
           <h2>{title}</h2>
           <div style={{ flex: 1 }} />
