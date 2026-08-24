@@ -109,7 +109,8 @@ export default function EventPublicPage() {
               Evento não encontrado
             </h1>
             <p className="form-description" style={{ textAlign: 'center' }}>
-              O link pode estar incompleto ou o evento já foi encerrado. Confira a mensagem recebida no WhatsApp.
+              O link pode estar incompleto ou o evento já foi realizado. Confira a mensagem mais recente no
+              WhatsApp para ver os próximos eventos.
             </p>
           </div>
         </div>

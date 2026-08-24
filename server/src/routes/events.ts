@@ -26,10 +26,15 @@ import {
 const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Inscrição aberta = evento ativo, lista aberta e ainda dentro do prazo (início + 2h). */
+/** Evento já passou do prazo (início + 2h): o link público deixa de existir. */
+function isExpired(ev: Pick<EventRow, 'event_date' | 'start_time'>): boolean {
+  return nowLocalISO(env.timezone) > registrationCutoffISO(ev.event_date, ev.start_time);
+}
+
+/** Inscrição aberta = evento ativo, lista aberta e ainda dentro do prazo. */
 function registrationOpen(ev: Pick<EventRow, 'status' | 'collect_open' | 'event_date' | 'start_time'>): boolean {
   if (ev.status !== 'ativo' || !ev.collect_open) return false;
-  return nowLocalISO(env.timezone) <= registrationCutoffISO(ev.event_date, ev.start_time);
+  return !isExpired(ev);
 }
 
 /* ============================== público ============================== */
@@ -39,7 +44,10 @@ export const publicEventsRouter = Router();
 /** Dados exibidos na página de inscrição. Nada além do necessário. */
 publicEventsRouter.get('/:slug', async (req, res) => {
   const ev = await db.prepare('SELECT * FROM events WHERE slug = ?').get<EventRow>(req.params.slug);
-  if (!ev || ev.status !== 'ativo') return res.status(404).json({ error: 'Evento não encontrado' });
+  // Depois do evento o link expira: responde como se não existisse.
+  if (!ev || ev.status !== 'ativo' || isExpired(ev)) {
+    return res.status(404).json({ error: 'Evento não encontrado' });
+  }
   // A imagem do topo e a mesma do formulario de agendamento (Configuracoes).
   const s = await getSettings();
   res.json({
@@ -67,7 +75,9 @@ const attendeeSchema = z.object({
 
 publicEventsRouter.post('/:slug/attendees', async (req, res) => {
   const ev = await db.prepare('SELECT * FROM events WHERE slug = ?').get<EventRow>(req.params.slug);
-  if (!ev || ev.status !== 'ativo') return res.status(404).json({ error: 'Evento não encontrado' });
+  if (!ev || ev.status !== 'ativo' || isExpired(ev)) {
+    return res.status(404).json({ error: 'Evento não encontrado' });
+  }
   if (!registrationOpen(ev)) {
     return res.status(403).json({ error: 'As inscrições deste evento já foram encerradas.' });
   }
