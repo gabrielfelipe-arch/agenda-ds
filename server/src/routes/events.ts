@@ -295,16 +295,6 @@ adminEventsRouter.get('/:id/attendees', async (req, res) => {
   res.json({ items: rows });
 });
 
-adminEventsRouter.delete('/:id/attendees/:attendeeId', async (req, res) => {
-  await db
-    .prepare('DELETE FROM attendees WHERE id = ? AND event_id = ?')
-    .run(req.params.attendeeId, req.params.id);
-  const rows = await db
-    .prepare('SELECT * FROM attendees WHERE event_id = ? ORDER BY created_at')
-    .all<AttendeeRow>(req.params.id);
-  res.json({ items: rows });
-});
-
 adminEventsRouter.get('/:id/attendees.xlsx', async (req, res) => {
   const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get<EventRow>(req.params.id);
   if (!ev) return res.status(404).json({ error: 'Evento não encontrado' });

@@ -7,7 +7,7 @@ import {
   type Attendee,
   type EventItem,
 } from '../api';
-import { Icon, Modal, formatDateBR, maskPhone, todayISO, useToast, weekdayLong } from '../ui';
+import { Icon, Modal, formatDateBR, formatDateTimeBR, maskPhone, todayISO, useToast, weekdayLong } from '../ui';
 
 function addDaysISO(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -430,17 +430,6 @@ function AttendeesModal({ item, onClose }: { item: EventItem; onClose: () => voi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
 
-  async function remove(a: Attendee) {
-    if (!window.confirm(`Remover ${a.name} da lista?`)) return;
-    try {
-      const r = await api.del<{ items: Attendee[] }>(`/admin/events/${item.id}/attendees/${a.id}`);
-      setRows(r.items);
-      toast.ok('Removido da lista.');
-    } catch (e) {
-      toast.err((e as Error).message);
-    }
-  }
-
   async function exportXlsx() {
     try {
       await downloadFile(`/admin/events/${item.id}/attendees.xlsx`, 'presenca.xlsx');
@@ -454,6 +443,7 @@ function AttendeesModal({ item, onClose }: { item: EventItem; onClose: () => voi
     <Modal
       title={`Lista de presença — ${item.title}`}
       onClose={onClose}
+      wide
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
@@ -487,7 +477,8 @@ function AttendeesModal({ item, onClose }: { item: EventItem; onClose: () => voi
                 <th>Nome</th>
                 <th>WhatsApp</th>
                 <th>Bairro</th>
-                <th></th>
+                <th>Cidade</th>
+                <th>Inscrito em</th>
               </tr>
             </thead>
             <tbody>
@@ -505,15 +496,9 @@ function AttendeesModal({ item, onClose }: { item: EventItem; onClose: () => voi
                       {maskPhone(a.whatsapp)}
                     </a>
                   </td>
-                  <td className="cell-soft">
-                    {a.district || '—'}
-                    {a.city ? ` · ${a.city}` : ''}
-                  </td>
-                  <td>
-                    <button className="icon-btn" onClick={() => void remove(a)} aria-label={`Remover ${a.name}`}>
-                      <Icon.Trash />
-                    </button>
-                  </td>
+                  <td className="cell-soft">{a.district || '—'}</td>
+                  <td className="cell-soft">{a.city || '—'}</td>
+                  <td className="cell-soft">{formatDateTimeBR(a.created_at)}</td>
                 </tr>
               ))}
             </tbody>
