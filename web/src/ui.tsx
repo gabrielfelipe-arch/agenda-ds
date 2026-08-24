@@ -353,16 +353,24 @@ export function Modal({
   children,
   footer,
   wide,
+  full,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  /** Ocupa a tela quase inteira — para listas com muitas colunas. */
+  full?: boolean;
 }) {
+  const size = full
+    ? { maxWidth: '97vw', width: '97vw', height: '94dvh', maxHeight: '94dvh' }
+    : wide
+      ? { maxWidth: 'min(1140px, 96vw)' }
+      : undefined;
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={wide ? { maxWidth: 'min(1140px, 96vw)' } : undefined} role="dialog" aria-modal="true">
+      <div className="modal" style={size} role="dialog" aria-modal="true">
         <div className="modal-head">
           <h2>{title}</h2>
           <div style={{ flex: 1 }} />

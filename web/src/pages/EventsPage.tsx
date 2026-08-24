@@ -7,7 +7,7 @@ import {
   type Attendee,
   type EventItem,
 } from '../api';
-import { Icon, Modal, formatDateBR, formatDateTimeBR, maskPhone, todayISO, useToast, weekdayLong } from '../ui';
+import { Icon, Modal, formatDateBR, formatDateTimeBR, isMobileDevice, maskPhone, todayISO, useToast, weekdayLong } from '../ui';
 
 function addDaysISO(iso: string, days: number): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -443,7 +443,7 @@ function AttendeesModal({ item, onClose }: { item: EventItem; onClose: () => voi
     <Modal
       title={`Lista de presença — ${item.title}`}
       onClose={onClose}
-      wide
+      full
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
@@ -521,7 +521,9 @@ function WeekMessageModal({ onClose }: { onClose: () => void }) {
   async function generate() {
     setBusy(true);
     try {
-      const res = await api.get<{ text: string }>(`/admin/events/message?from=${from}&to=${to}`);
+      // No computador pede a versão sem emojis (o app do Windows os quebra).
+      const plain = isMobileDevice() ? '' : '&plain=1';
+      const res = await api.get<{ text: string }>(`/admin/events/message?from=${from}&to=${to}${plain}`);
       setText(res.text);
     } catch (e) {
       setText('');

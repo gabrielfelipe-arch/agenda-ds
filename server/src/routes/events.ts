@@ -17,6 +17,7 @@ import {
   periodLabel,
   registrationCutoffISO,
   shortDateBR,
+  stripEmojis,
   timeBR,
   upper,
   weekdayBR,
@@ -380,5 +381,12 @@ adminEventsRouter.get('/message', async (req, res) => {
   const footer = (s.events_msg_footer || '').trim();
   if (footer) parts.push(footer);
 
-  res.json({ text: parts.join('\n\n'), count: rows.length, period: periodLabel(from, to) });
+  // Mesma regra das mensagens de confirmação: no computador (plain=1, modo auto)
+  // os emojis saem, porque o aplicativo do Windows os exibe quebrados.
+  const mode = s.whatsapp_emojis || 'auto';
+  const plainRequested = String(req.query.plain || '') === '1';
+  const semEmojis = mode === 'never' || (mode === 'auto' && plainRequested);
+  const text = parts.join('\n\n');
+
+  res.json({ text: semEmojis ? stripEmojis(text) : text, count: rows.length, period: periodLabel(from, to) });
 });
