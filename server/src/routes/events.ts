@@ -1,6 +1,4 @@
-import path from 'path';
 import { Router } from 'express';
-import multer from 'multer';
 import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { db, getSettings } from '../db';
@@ -41,6 +39,8 @@ export const publicEventsRouter = Router();
 publicEventsRouter.get('/:slug', async (req, res) => {
   const ev = await db.prepare('SELECT * FROM events WHERE slug = ?').get<EventRow>(req.params.slug);
   if (!ev || ev.status !== 'ativo') return res.status(404).json({ error: 'Evento não encontrado' });
+  // A imagem do topo e a mesma do formulario de agendamento (Configuracoes).
+  const s = await getSettings();
   res.json({
     slug: ev.slug,
     title: ev.title,
@@ -49,7 +49,7 @@ publicEventsRouter.get('/:slug', async (req, res) => {
     end_time: ev.end_time,
     location: ev.location,
     description: ev.description || '',
-    image_url: ev.image_url || '',
+    image_url: s.form_header_image_url || '',
     collect_open: registrationOpen(ev),
   });
 });
@@ -341,44 +341,6 @@ adminEventsRouter.get('/:id/attendees.xlsx', async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="presenca-${safe}-${ev.event_date}.xlsx"`);
   await wb.xlsx.write(res);
   res.end();
-});
-
-/* ------------------------------ imagem topo ------------------------------ */
-
-const upload = multer({
-  storage: env.serverless
-    ? multer.memoryStorage()
-    : multer.diskStorage({
-        destination: (_req, _file, cb) => cb(null, env.uploadsDir),
-        filename: (req, file, cb) => {
-          const ext = path.extname(file.originalname).toLowerCase().slice(0, 6) || '.jpg';
-          cb(null, `event-${req.params.id}-${Date.now()}${ext}`);
-        },
-      }),
-  limits: { fileSize: 8 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)),
-});
-
-adminEventsRouter.post('/:id/image', upload.single('file'), async (req, res) => {
-  const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get<EventRow>(req.params.id);
-  if (!ev) return res.status(404).json({ error: 'Evento não encontrado' });
-  if (!req.file) return res.status(400).json({ error: 'Envie uma imagem JPG, PNG ou WEBP de até 8MB' });
-
-  let url: string;
-  if (env.serverless) {
-    const { put } = await import('@vercel/blob');
-    const ext = path.extname(req.file.originalname).toLowerCase().slice(0, 6) || '.jpg';
-    const blob = await put(`agenda5588/eventos/${ev.slug}-${Date.now()}${ext}`, req.file.buffer, {
-      access: 'public',
-      contentType: req.file.mimetype,
-    });
-    url = blob.url;
-  } else {
-    url = `/uploads/${req.file.filename}`;
-  }
-
-  await db.prepare('UPDATE events SET image_url = ?, updated_at = ? WHERE id = ?').run(url, new Date().toISOString(), ev.id);
-  res.json({ url });
 });
 
 /* --------------------------- mensagem da semana --------------------------- */

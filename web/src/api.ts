@@ -266,20 +266,6 @@ export interface PublicEvent {
   collect_open: boolean;
 }
 
-export async function uploadEventImage(eventId: string, file: File): Promise<{ url: string }> {
-  const token = getToken();
-  const fd = new FormData();
-  fd.append('file', file);
-  const res = await fetch(`/api/admin/events/${eventId}/image`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: fd,
-  });
-  const data = (await res.json()) as { url?: string; error?: string };
-  if (!res.ok) throw new ApiError(data.error || 'Falha no upload', res.status);
-  return { url: data.url! };
-}
-
 /** Link público de inscrição de um evento, no domínio atual. */
 export function eventPublicUrl(slug: string): string {
   return `${window.location.origin}/evento/${slug}`;

@@ -4,7 +4,6 @@ import {
   api,
   downloadFile,
   eventPublicUrl,
-  uploadEventImage,
   type Attendee,
   type EventItem,
 } from '../api';
@@ -244,8 +243,6 @@ function EventModal({
     collect_open: item ? item.collect_open : true,
   });
   const [busy, setBusy] = useState(false);
-  const [imageUrl, setImageUrl] = useState(item?.image_url || '');
-  const [uploading, setUploading] = useState(false);
 
   const set = <K extends keyof EventForm>(k: K, v: EventForm[K]) => setData((p) => ({ ...p, [k]: v }));
 
@@ -298,20 +295,6 @@ function EventModal({
       toast.err((e as Error).message);
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function onImage(file: File | undefined) {
-    if (!item || !file) return;
-    setUploading(true);
-    try {
-      const res = await uploadEventImage(item.id, file);
-      setImageUrl(res.url);
-      toast.ok('Imagem atualizada.');
-    } catch (e) {
-      toast.err((e as Error).message);
-    } finally {
-      setUploading(false);
     }
   }
 
@@ -423,31 +406,9 @@ function EventModal({
         <span>Inscrições abertas (lista de presença)</span>
       </label>
 
-      <div className="section-title">Imagem do topo da página de inscrição</div>
-      {item ? (
-        <>
-          {imageUrl && (
-            <img
-              src={imageUrl}
-              alt="Imagem do evento"
-              style={{ maxWidth: '100%', borderRadius: 10, marginBottom: 10, maxHeight: 180, objectFit: 'cover' }}
-            />
-          )}
-          <label className="btn btn-ghost btn-sm" style={{ cursor: 'pointer' }}>
-            {uploading ? <div className="spinner" /> : <Icon.Plus />}
-            {imageUrl ? 'Trocar imagem' : 'Enviar imagem'}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              style={{ display: 'none' }}
-              onChange={(e) => void onImage(e.target.files?.[0])}
-              disabled={uploading}
-            />
-          </label>
-        </>
-      ) : (
-        <p className="hint">Crie o evento primeiro — o envio da imagem fica disponível na edição.</p>
-      )}
+      <p className="hint" style={{ marginTop: 12 }}>
+        A imagem do topo da página de inscrição é a mesma do cabeçalho do formulário (Configurações).
+      </p>
     </Modal>
   );
 }
