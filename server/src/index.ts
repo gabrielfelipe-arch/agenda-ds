@@ -32,6 +32,10 @@ app.use(
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
         formAction: ["'self'"],
+        // Sem HTTPS no acesso local por IP: a diretiva padrao do helmet
+        // (upgrade-insecure-requests) forcaria os assets para https:// e a
+        // pagina nao carregaria. Na Vercel o HTTPS ja e obrigatorio.
+        upgradeInsecureRequests: null,
       },
     },
     crossOriginEmbedderPolicy: false,

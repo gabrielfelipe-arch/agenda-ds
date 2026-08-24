@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   api,
   downloadFile,
@@ -17,6 +18,7 @@ function addDaysISO(iso: string, days: number): string {
 
 export default function EventsPage() {
   const toast = useToast();
+  const location = useLocation();
   const [items, setItems] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState(todayISO());
@@ -25,6 +27,17 @@ export default function EventsPage() {
   const [editing, setEditing] = useState<EventItem | 'new' | null>(null);
   const [attendeesOf, setAttendeesOf] = useState<EventItem | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
+
+  // Evento recém-gerado a partir de uma solicitação: abre direto na edição
+  // (e inclui os passados no filtro, para ele aparecer na lista mesmo com data antiga).
+  useEffect(() => {
+    const opened = (location.state as { open?: EventItem } | null)?.open;
+    if (!opened) return;
+    setEditing(opened);
+    if (opened.event_date < todayISO()) setShowPast(true);
+    window.history.replaceState({}, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function load() {
     setLoading(true);

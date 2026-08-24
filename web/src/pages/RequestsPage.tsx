@@ -676,9 +676,9 @@ function RequestModal({
   async function gerarEvento() {
     setBusy(true);
     try {
-      await api.post<{ item: EventItem }>('/admin/events', { request_id: item.id });
+      const res = await api.post<{ item: EventItem }>('/admin/events', { request_id: item.id });
       toast.ok('Evento criado! Ajuste os detalhes e copie o link de inscrição.');
-      navigate('/admin/eventos');
+      navigate('/admin/eventos', { state: { open: res.item } });
     } catch (e) {
       toast.err((e as Error).message);
       setBusy(false);
