@@ -159,3 +159,88 @@ export function waPhone(whatsapp: string): string {
 export function waLink(whatsapp: string, message: string): string {
   return `https://wa.me/${waPhone(whatsapp)}?text=${encodeURIComponent(message)}`;
 }
+
+/* ------------------------------- eventos ------------------------------- */
+
+export const EVENT_STATUSES = ['ativo', 'cancelado'] as const;
+export type EventStatus = (typeof EVENT_STATUSES)[number];
+
+export interface EventRow {
+  id: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+  status: EventStatus;
+  title: string;
+  event_date: string;
+  start_time: string;
+  end_time: string | null;
+  location: string;
+  description: string | null;
+  image_url: string | null;
+  collect_open: number;
+  request_id: string | null;
+  created_by: string | null;
+}
+
+export interface AttendeeRow {
+  id: string;
+  event_id: string;
+  created_at: string;
+  name: string;
+  whatsapp: string;
+  cep: string | null;
+  district: string | null;
+  city: string | null;
+}
+
+/** Identificador curto para o link público do evento (ex.: k7x2mq9d). */
+export function newSlug(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+}
+
+/** "17:20" -> "17h20"; "20:00" -> "20h" (formato usado nas mensagens de WhatsApp). */
+export function timeBR(time: string): string {
+  const [h, m] = time.split(':');
+  return m === '00' ? `${Number(h)}h` : `${Number(h)}h${m}`;
+}
+
+/** "24/8" — dia/mês sem zeros à esquerda, como se escreve em mensagem. */
+export function shortDateBR(iso: string): string {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d}/${m}`;
+}
+
+/** Rótulo do período da mensagem semanal: "24 a 30/8" ou "28/8 a 3/9". */
+export function periodLabel(fromISO: string, toISO: string): string {
+  const [, fm, fd] = fromISO.split('-').map(Number);
+  const [, tm, td] = toISO.split('-').map(Number);
+  if (fromISO === toISO) return `${fd}/${fm}`;
+  if (fm === tm) return `${fd} a ${td}/${tm}`;
+  return `${fd}/${fm} a ${td}/${tm}`;
+}
+
+/** Agora no fuso informado, em "AAAA-MM-DDTHH:MM" — comparável com data+hora de evento. */
+export function nowLocalISO(tz: string): string {
+  // O locale sv-SE formata como "AAAA-MM-DD HH:mm:ss".
+  return new Date().toLocaleString('sv-SE', { timeZone: tz }).slice(0, 16).replace(' ', 'T');
+}
+
+/**
+ * Limite de inscrição de um evento: 2 horas após o início.
+ * Depois disso o link mostra "inscrições encerradas" sozinho.
+ */
+export function registrationCutoffISO(eventDate: string, startTime: string, graceHours = 2): string {
+  const [h, m] = startTime.split(':').map(Number);
+  const total = h * 60 + m + graceHours * 60;
+  const dayOffset = Math.floor(total / 1440);
+  const hh = String(Math.floor((total % 1440) / 60)).padStart(2, '0');
+  const mm = String(total % 60).padStart(2, '0');
+  let date = eventDate;
+  if (dayOffset > 0) {
+    const [y, mo, d] = eventDate.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, mo - 1, d + dayOffset));
+    date = dt.toISOString().slice(0, 10);
+  }
+  return `${date}T${hh}:${mm}`;
+}

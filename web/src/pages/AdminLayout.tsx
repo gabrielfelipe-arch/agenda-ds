@@ -47,6 +47,7 @@ export default function AdminLayout() {
   const navItems = [
     { to: '/admin/solicitacoes', label: 'Solicitações', short: 'Agendas', icon: <Icon.List />, roles: ['admin', 'gerente'] },
     { to: '/admin/agenda', label: 'Agenda', short: 'Calendário', icon: <Icon.Calendar />, roles: ['admin', 'gerente'] },
+    { to: '/admin/eventos', label: 'Eventos', short: 'Eventos', icon: <Icon.Group />, roles: ['admin', 'gerente'] },
     { to: '/admin/relatorios', label: 'Relatórios', short: 'Relatórios', icon: <Icon.Download />, roles: ['admin', 'gerente'] },
     { to: '/admin/usuarios', label: 'Usuários', short: 'Usuários', icon: <Icon.Users />, roles: ['admin'] },
     { to: '/admin/configuracoes', label: 'Configurações', short: 'Config.', icon: <Icon.Settings />, roles: ['admin'] },

@@ -5,6 +5,8 @@ import FormPage from './pages/FormPage';
 import LoginPage from './pages/LoginPage';
 import AdminLayout from './pages/AdminLayout';
 import RequestsPage from './pages/RequestsPage';
+import EventsPage from './pages/EventsPage';
+import EventPublicPage from './pages/EventPublicPage';
 import CalendarPage from './pages/CalendarPage';
 import ReportsPage from './pages/ReportsPage';
 import UsersPage from './pages/UsersPage';
@@ -18,10 +20,12 @@ export default function App() {
           <Routes>
             <Route path="/" element={<FormPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/evento/:slug" element={<EventPublicPage />} />
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="/admin/solicitacoes" replace />} />
               <Route path="solicitacoes" element={<RequestsPage />} />
               <Route path="agenda" element={<CalendarPage />} />
+              <Route path="eventos" element={<EventsPage />} />
               <Route path="relatorios" element={<ReportsPage />} />
               <Route path="usuarios" element={<UsersPage />} />
               <Route path="configuracoes" element={<SettingsPage />} />

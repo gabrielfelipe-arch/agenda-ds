@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, downloadFile, STATUS_LABELS, type AgendaRequest, type Status } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { api, downloadFile, STATUS_LABELS, type AgendaRequest, type EventItem, type Status } from '../api';
 import { useAuth } from '../auth';
 import {
   Icon,
@@ -667,8 +668,22 @@ function RequestModal({
 }) {
   const toast = useToast();
   const { can } = useAuth();
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState(item.admin_notes || '');
+
+  /** Cria um evento com lista de presença a partir desta solicitação. */
+  async function gerarEvento() {
+    setBusy(true);
+    try {
+      await api.post<{ item: EventItem }>('/admin/events', { request_id: item.id });
+      toast.ok('Evento criado! Ajuste os detalhes e copie o link de inscrição.');
+      navigate('/admin/eventos');
+    } catch (e) {
+      toast.err((e as Error).message);
+      setBusy(false);
+    }
+  }
 
   async function changeStatus(status: Status) {
     setBusy(true);
@@ -746,6 +761,12 @@ function RequestModal({
             <Icon.Whats />
             Mensagem
           </button>
+          {(item.status === 'confirmado' || item.status === 'realizado') && (
+            <button className="btn btn-ghost" onClick={() => void gerarEvento()} disabled={busy}>
+              <Icon.Group />
+              Gerar evento
+            </button>
+          )}
           {item.status !== 'confirmado' && (
             <button className="btn btn-primary" onClick={() => void changeStatus('confirmado')} disabled={busy}>
               <Icon.Check />

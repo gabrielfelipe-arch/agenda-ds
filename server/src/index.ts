@@ -12,6 +12,7 @@ import { publicRouter } from './routes/public';
 import { authRouter } from './routes/auth';
 import { adminRouter } from './routes/admin';
 import { usersRouter } from './routes/users';
+import { adminEventsRouter, publicEventsRouter } from './routes/events';
 import { googleRouter } from './routes/google';
 
 const app = express();
@@ -67,11 +68,24 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, uptime: process.uptim
 app.use('/api/public/requests', publicFormLimiter);
 app.use('/api/public', publicRouter);
 
+// Inscrição em eventos: mesmo espírito do formulário público, limite um pouco maior
+// (o link circula em grupos, várias pessoas podem dividir a mesma rede/IP).
+const attendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 40,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Muitas inscrições enviadas desta rede. Tente novamente em instantes.' },
+});
+app.use('/api/public/events/:slug/attendees', attendLimiter);
+app.use('/api/public/events', publicEventsRouter);
+
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/webauthn/login', loginLimiter);
 app.use('/api/auth', authRouter);
 
 app.use('/api/admin/users', usersRouter);
+app.use('/api/admin/events', adminEventsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/google', googleRouter);
 

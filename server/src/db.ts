@@ -141,8 +141,41 @@ CREATE TABLE IF NOT EXISTS activity_log (
   detail TEXT
 );
 
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ativo',
+  title TEXT NOT NULL,
+  event_date TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT,
+  location TEXT NOT NULL,
+  description TEXT,
+  image_url TEXT,
+  collect_open INTEGER NOT NULL DEFAULT 1,
+  request_id TEXT,
+  created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS attendees (
+  id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  name TEXT NOT NULL,
+  whatsapp TEXT NOT NULL,
+  cep TEXT,
+  district TEXT,
+  city TEXT,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  UNIQUE (event_id, whatsapp)
+);
+
 CREATE INDEX IF NOT EXISTS idx_requests_date ON requests(event_date);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date);
+CREATE INDEX IF NOT EXISTS idx_attendees_event ON attendees(event_id);
 CREATE INDEX IF NOT EXISTS idx_wa_user ON webauthn_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_log_request ON activity_log(request_id);
 `;
@@ -239,6 +272,12 @@ Nos vemos l\u00e1! \u{1F499}
 *Seu voto \u00e9 + sa\u00fade para sua fam\u00edlia* \u{1F49A}
 *Daniel Soranz 5588* | *Eduardo Paes 55*`,
   whatsapp_emojis: 'auto',
+  events_msg_header: `📣 *AGENDA DE AÇÕES* [{{periodo}}]
+
+Pessoal, confira a programação das próximas ações de campanha.
+Vamos nos organizar para garantir a presença e a participação de todos!`,
+  events_msg_footer: '',
+  events_msg_link_label: '📝 Confirme presença:',
   google_client_id: '',
   google_client_secret: '',
   google_calendar_id: 'primary',

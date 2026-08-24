@@ -218,3 +218,69 @@ export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
   gerente: 'Gerente de agenda',
 };
+
+/* -------------------------------- eventos -------------------------------- */
+
+export type EventStatus = 'ativo' | 'cancelado';
+
+export interface EventItem {
+  id: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+  status: EventStatus;
+  title: string;
+  event_date: string;
+  start_time: string;
+  end_time: string | null;
+  location: string;
+  description: string | null;
+  image_url: string | null;
+  collect_open: boolean;
+  registration_open: boolean;
+  request_id: string | null;
+  created_by: string | null;
+  attendee_count: number;
+}
+
+export interface Attendee {
+  id: string;
+  event_id: string;
+  created_at: string;
+  name: string;
+  whatsapp: string;
+  cep: string | null;
+  district: string | null;
+  city: string | null;
+}
+
+export interface PublicEvent {
+  slug: string;
+  title: string;
+  event_date: string;
+  start_time: string;
+  end_time: string | null;
+  location: string;
+  description: string;
+  image_url: string;
+  collect_open: boolean;
+}
+
+export async function uploadEventImage(eventId: string, file: File): Promise<{ url: string }> {
+  const token = getToken();
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`/api/admin/events/${eventId}/image`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  const data = (await res.json()) as { url?: string; error?: string };
+  if (!res.ok) throw new ApiError(data.error || 'Falha no upload', res.status);
+  return { url: data.url! };
+}
+
+/** Link público de inscrição de um evento, no domínio atual. */
+export function eventPublicUrl(slug: string): string {
+  return `${window.location.origin}/evento/${slug}`;
+}

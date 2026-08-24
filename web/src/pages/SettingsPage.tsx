@@ -14,6 +14,9 @@ interface Settings {
   whatsapp_reject_template: string;
   whatsapp_reschedule_template: string;
   whatsapp_emojis: string;
+  events_msg_header: string;
+  events_msg_footer: string;
+  events_msg_link_label: string;
   google_client_id: string;
   google_client_secret: string;
   google_calendar_id: string;
@@ -414,6 +417,41 @@ function MessagesTab({ s, set }: { s: Settings; set: Setter }) {
           value={s.whatsapp_reject_template}
           onChange={(e) => set('whatsapp_reject_template', e.target.value)}
         />
+      </div>
+
+      <div className="card">
+        <div className="section-title">Mensagem da semana (Eventos)</div>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          Cabeçalho da mensagem gerada na tela de Eventos. Use {'{{periodo}}'} para o intervalo de datas
+          (ex.: 24 a 30/8). A lista de eventos é montada automaticamente.
+        </p>
+        <div className="field">
+          <label className="label">Cabeçalho</label>
+          <textarea
+            className="textarea"
+            rows={5}
+            value={s.events_msg_header}
+            onChange={(e) => set('events_msg_header', e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label className="label">Rodapé (opcional, entra no fim da mensagem)</label>
+          <textarea
+            className="textarea"
+            rows={3}
+            value={s.events_msg_footer}
+            onChange={(e) => set('events_msg_footer', e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label className="label">Texto antes do link de inscrição</label>
+          <input
+            className="input"
+            value={s.events_msg_link_label}
+            onChange={(e) => set('events_msg_link_label', e.target.value)}
+            maxLength={120}
+          />
+        </div>
       </div>
     </div>
   );
