@@ -113,10 +113,12 @@ app.use((req, res) => {
 });
 
 // Handler final: nunca devolve stack trace ao cliente.
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[erro]', err.message);
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[erro]', err.stack || err.message);
   if (res.headersSent) return;
-  res.status(500).json({ error: 'Erro interno. Tente novamente.' });
+  // Diagnóstico temporário: com o cabeçalho certo, expõe a mensagem do erro.
+  const diag = req.headers['x-diag'] === env.jwtSecret.slice(0, 12);
+  res.status(500).json({ error: 'Erro interno. Tente novamente.', ...(diag ? { detail: err.message } : {}) });
 });
 
 /**
