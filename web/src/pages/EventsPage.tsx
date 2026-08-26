@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '../auth';
 import {
   api,
   downloadFile,
@@ -233,6 +234,7 @@ function EventModal({
   onSaved: () => void;
 }) {
   const toast = useToast();
+  const { can } = useAuth();
   const [data, setData] = useState<EventForm>({
     title: item?.title || '',
     event_date: item?.event_date || '',
@@ -306,10 +308,12 @@ function EventModal({
         <>
           {item && (
             <>
-              <button className="btn btn-danger btn-sm" onClick={() => void removeEvent()} disabled={busy}>
-                <Icon.Trash />
-                Excluir
-              </button>
+              {can('admin') && (
+                <button className="btn btn-danger btn-sm" onClick={() => void removeEvent()} disabled={busy}>
+                  <Icon.Trash />
+                  Excluir
+                </button>
+              )}
               {item.status === 'ativo' && (
                 <button className="btn btn-ghost btn-sm" onClick={() => void cancelEvent()} disabled={busy}>
                   Cancelar evento

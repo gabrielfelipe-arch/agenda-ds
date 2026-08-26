@@ -37,6 +37,12 @@ const createSchema = z.object({
   reference: z.string().trim().max(200).optional().default(''),
   audience: z.string().trim().min(1, 'Selecione o público estimado'),
   agenda: z.string().trim().min(10, 'Descreva a pauta com pelo menos 10 caracteres').max(4000),
+  needs_material: z.boolean({ message: 'Informe se necessita material de divulgação' }),
+  team_size: z
+    .number({ message: 'Informe a quantidade de pessoas na equipe' })
+    .int()
+    .min(1, 'Informe a quantidade de pessoas na equipe')
+    .max(500, 'Quantidade de pessoas inválida'),
 });
 
 async function nextProtocol(): Promise<string> {
@@ -93,11 +99,11 @@ publicRouter.post('/requests', async (req, res) => {
     `INSERT INTO requests (
       id, protocol, created_at, updated_at, status, requester_name, whatsapp, event_date,
       start_time, duration_hours, arrival_time, cep, street, number, complement, district,
-      city, state, reference, audience, agenda
+      city, state, reference, audience, agenda, needs_material, team_size
     ) VALUES (
       @id, @protocol, @created_at, @updated_at, 'pendente', @requester_name, @whatsapp, @event_date,
       @start_time, @duration_hours, @arrival_time, @cep, @street, @number, @complement, @district,
-      @city, @state, @reference, @audience, @agenda
+      @city, @state, @reference, @audience, @agenda, @needs_material, @team_size
     )`
   ).run({
     id,
@@ -121,6 +127,8 @@ publicRouter.post('/requests', async (req, res) => {
     reference: upper(d.reference),
     audience: d.audience,
     agenda: upper(d.agenda),
+    needs_material: d.needs_material ? 1 : 0,
+    team_size: d.team_size,
   });
 
   res.status(201).json({ id, protocol, successMessage: s.form_success_message });

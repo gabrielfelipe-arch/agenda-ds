@@ -69,7 +69,6 @@ export default function EventPublicPage() {
     if (data.name.trim().length < 3) e.name = 'Informe o nome completo';
     const phone = onlyDigits(data.whatsapp);
     if (phone.length < 10 || phone.length > 11) e.whatsapp = 'Informe o WhatsApp com DDD';
-    if (!data.district.trim()) e.district = 'Informe o bairro (ou preencha o CEP)';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -236,7 +235,7 @@ export default function EventPublicPage() {
                 </div>
                 <div className="field">
                   <label className="label" htmlFor="bairro">
-                    Bairro<span className="req">*</span>
+                    Bairro
                   </label>
                   <input
                     id="bairro"

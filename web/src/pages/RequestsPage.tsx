@@ -97,6 +97,7 @@ interface WaPreview {
 export default function RequestsPage() {
   const toast = useToast();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [showClosed, setShowClosed] = useState(false);
   const [items, setItems] = useState<AgendaRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AgendaRequest | null>(null);
@@ -108,7 +109,13 @@ export default function RequestsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ items: AgendaRequest[] }>(`/admin/requests${buildQuery(filters)}`);
+      // Lista inicial mostra só o que precisa de atenção (pendentes e confirmadas).
+      // A caixinha ou um filtro explícito de status liberam as demais.
+      const effective =
+        filters.status.length || showClosed
+          ? filters
+          : { ...filters, status: ['pendente', 'confirmado'] };
+      const res = await api.get<{ items: AgendaRequest[] }>(`/admin/requests${buildQuery(effective)}`);
       setItems(res.items);
     } catch (e) {
       toast.err((e as Error).message);
@@ -116,7 +123,7 @@ export default function RequestsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, showClosed]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 250);
@@ -209,6 +216,11 @@ export default function RequestsPage() {
       </div>
 
       <FiltersBar filters={filters} setFilters={setFilters} options={options} />
+
+      <label className="switch" style={{ margin: '10px 0 14px' }}>
+        <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
+        <span>Exibir realizadas, recusadas e canceladas</span>
+      </label>
 
       {loading ? (
         <div className="loading-page">
@@ -796,6 +808,8 @@ function RequestModal({
         />
         <Detail k="Chegada da equipe" v={item.arrival_time} />
         <Detail k="Público estimado" v={item.audience} />
+        <Detail k="Material de divulgação" v={item.needs_material ? 'Sim' : 'Não'} />
+        <Detail k="Pessoas na equipe" v={item.team_size != null ? String(item.team_size) : '—'} />
       </div>
 
       <div className="section-title">Solicitante</div>

@@ -47,6 +47,8 @@ export interface RequestRow {
   reference: string | null;
   audience: string;
   agenda: string;
+  needs_material: number;
+  team_size: number | null;
   admin_notes: string | null;
   google_event_id: string | null;
   google_event_link: string | null;
@@ -118,6 +120,8 @@ export function renderTemplate(tpl: string, r: RequestRow): string {
     protocolo: r.protocol,
     fim: addHours(r.start_time, r.duration_hours),
     whatsapp: r.whatsapp,
+    material: r.needs_material ? 'Sim' : 'Não',
+    equipe: r.team_size != null ? String(r.team_size) : '',
   };
   return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => map[k] ?? '');
 }

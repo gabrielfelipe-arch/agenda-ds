@@ -97,6 +97,8 @@ CREATE TABLE IF NOT EXISTS requests (
   reference TEXT,
   audience TEXT NOT NULL,
   agenda TEXT NOT NULL,
+  needs_material INTEGER NOT NULL DEFAULT 0,
+  team_size INTEGER,
   admin_notes TEXT,
   google_event_id TEXT,
   google_event_link TEXT,
@@ -186,6 +188,17 @@ CREATE INDEX IF NOT EXISTS idx_log_request ON activity_log(request_id);
  */
 export async function initSchema() {
   await db.exec(SCHEMA);
+  // Colunas adicionadas depois: o CREATE TABLE acima so vale para bancos novos.
+  for (const ddl of [
+    'ALTER TABLE requests ADD COLUMN needs_material INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE requests ADD COLUMN team_size INTEGER',
+  ]) {
+    try {
+      await db.exec(ddl);
+    } catch {
+      /* coluna ja existe */
+    }
+  }
 }
 
 /* ---------------------------------------------------------------------------

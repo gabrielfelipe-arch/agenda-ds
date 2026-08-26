@@ -171,6 +171,8 @@ export interface AgendaRequest {
   reference: string | null;
   audience: string;
   agenda: string;
+  needs_material: number;
+  team_size: number | null;
   admin_notes: string | null;
   google_event_id: string | null;
   google_event_link: string | null;

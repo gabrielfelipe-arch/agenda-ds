@@ -15,6 +15,7 @@ import {
   addHours,
   durationLabel,
   formatDateBR,
+  nowLocalISO,
   onlyDigits,
   renderTemplate,
   stripEmojis,
@@ -113,7 +114,31 @@ function queryRequests(f: Filters): Promise<RequestRow[]> {
   return db.prepare(sql).all<RequestRow>(params);
 }
 
+/**
+ * Encerramento automático: passou o dia do evento, a solicitação confirmada
+ * vira "realizado" e a pendente (ninguém tratou a tempo) vira "cancelado".
+ * Roda de forma preguiçosa antes das listagens — barato e idempotente.
+ */
+async function autoCloseRequests() {
+  const today = nowLocalISO(env.timezone).slice(0, 10);
+  const stale = await db
+    .prepare("SELECT id, status FROM requests WHERE event_date < ? AND status IN ('pendente', 'confirmado')")
+    .all<{ id: string; status: string }>(today);
+  if (!stale.length) return;
+  const now = new Date().toISOString();
+  for (const r of stale) {
+    const next = r.status === 'confirmado' ? 'realizado' : 'cancelado';
+    await db.prepare('UPDATE requests SET status = ?, updated_at = ? WHERE id = ?').run(next, now, r.id);
+    await db
+      .prepare(
+        'INSERT INTO activity_log (created_at, user_id, user_name, request_id, action, detail) VALUES (?, NULL, ?, ?, ?, ?)'
+      )
+      .run(now, 'Sistema', r.id, 'status', `${r.status} -> ${next} (automático: data do evento passou)`);
+  }
+}
+
 adminRouter.get('/requests', async (req, res) => {
+  await autoCloseRequests();
   const rows = await queryRequests(req.query as Filters);
   res.json({ items: rows, total: rows.length });
 });
@@ -360,6 +385,7 @@ adminRouter.get('/requests/:id/whatsapp', async (req, res) => {
 /* ------------------------------ exportação ------------------------------ */
 
 adminRouter.get('/export.xlsx', async (req, res) => {
+  await autoCloseRequests();
   const rows = await queryRequests(req.query as Filters);
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Agenda 5588';
@@ -374,6 +400,8 @@ adminRouter.get('/export.xlsx', async (req, res) => {
     { header: 'Término', key: 'end_time', width: 9 },
     { header: 'Duração', key: 'duration_label', width: 16 },
     { header: 'Chegada', key: 'arrival_time', width: 10 },
+    { header: 'Material de divulgação', key: 'needs_material', width: 20 },
+    { header: 'Pessoas na equipe', key: 'team_size', width: 16 },
     { header: 'Solicitante', key: 'requester_name', width: 30 },
     { header: 'WhatsApp', key: 'whatsapp', width: 16 },
     { header: 'CEP', key: 'cep', width: 12 },
@@ -401,6 +429,8 @@ adminRouter.get('/export.xlsx', async (req, res) => {
       weekday: weekdayBR(r.event_date),
       duration_label: durationLabel(r.duration_hours),
       end_time: addHours(r.start_time, r.duration_hours),
+      needs_material: r.needs_material ? 'Sim' : 'Não',
+      team_size: r.team_size ?? '',
       created_at: new Date(r.created_at).toLocaleString('pt-BR'),
       confirmed_at: r.confirmed_at ? new Date(r.confirmed_at).toLocaleString('pt-BR') : '',
       updated_at: new Date(r.updated_at).toLocaleString('pt-BR'),

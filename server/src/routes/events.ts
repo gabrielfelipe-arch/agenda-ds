@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { z } from 'zod';
 import { db, getSettings } from '../db';
 import { env } from '../env';
-import { AuthedRequest, requireAuth } from '../auth';
+import { AuthedRequest, requireAuth, requireRole } from '../auth';
 import {
   AttendeeRow,
   EventRow,
@@ -287,7 +287,7 @@ adminEventsRouter.patch('/:id', async (req, res) => {
   res.json({ item: toItem({ ...ev, ...next, attendee_count: count?.n ?? 0 } as EventRow & { attendee_count: number }) });
 });
 
-adminEventsRouter.delete('/:id', async (req, res) => {
+adminEventsRouter.delete('/:id', requireRole('admin'), async (req, res) => {
   const ev = await db.prepare('SELECT id FROM events WHERE id = ?').get<{ id: string }>(req.params.id);
   if (!ev) return res.status(404).json({ error: 'Evento não encontrado' });
   await db.prepare('DELETE FROM attendees WHERE event_id = ?').run(ev.id);

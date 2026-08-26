@@ -10,6 +10,8 @@ interface FormData {
   start_time: string;
   duration_hours: number;
   arrival_time: string;
+  needs_material: boolean | null;
+  team_size: string;
   cep: string;
   street: string;
   number: string;
@@ -29,6 +31,8 @@ const EMPTY: FormData = {
   start_time: '',
   duration_hours: 1,
   arrival_time: '',
+  needs_material: null,
+  team_size: '',
   cep: '',
   street: '',
   number: '',
@@ -158,6 +162,10 @@ export default function FormPage() {
     if (data.street.trim().length < 3) e.street = 'Informe a rua / avenida';
     if (!data.number.trim()) e.number = 'Informe o número';
     if (data.city.trim().length < 2) e.city = 'Informe a cidade';
+    if (data.needs_material === null) e.needs_material = 'Informe se necessita material de divulgação';
+    const equipe = Number(onlyDigits(data.team_size));
+    if (!data.team_size || equipe < 1 || equipe > 500)
+      e.team_size = 'Informe a quantidade de pessoas na equipe';
     if (!data.audience) e.audience = 'Selecione o público estimado';
     if (data.agenda.trim().length < 10) e.agenda = 'Descreva a pauta com pelo menos 10 caracteres';
     setErrors(e);
@@ -179,6 +187,8 @@ export default function FormPage() {
         ...data,
         whatsapp: onlyDigits(data.whatsapp),
         cep: onlyDigits(data.cep),
+        needs_material: data.needs_material === true,
+        team_size: Number(onlyDigits(data.team_size)),
       });
       setDone({ protocol: res.protocol, message: res.successMessage || config?.successMessage || '' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -393,6 +403,46 @@ export default function FormPage() {
                 step={300}
               />
               {errors.arrival_time && <span className="error-text">{errors.arrival_time}</span>}
+            </div>
+
+            <div className="field" data-error={errors.needs_material ? 'true' : 'false'}>
+              <label className="label">
+                Necessita material de divulgação?<span className="req">*</span>
+              </label>
+              <div className="chips">
+                {([
+                  [true, 'Sim'],
+                  [false, 'Não'],
+                ] as const).map(([v, rotulo]) => (
+                  <button
+                    key={rotulo}
+                    type="button"
+                    className="chip"
+                    aria-pressed={data.needs_material === v}
+                    onClick={() => set('needs_material', v)}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
+              </div>
+              {errors.needs_material && <span className="error-text">{errors.needs_material}</span>}
+            </div>
+
+            <div className="field">
+              <label className="label" htmlFor="equipe">
+                Quantidade de pessoas na equipe<span className="req">*</span>
+              </label>
+              <span className="hint">Para sabermos quanto material levar.</span>
+              <input
+                id="equipe"
+                className={`input ${errors.team_size ? 'error' : ''}`}
+                value={data.team_size}
+                onChange={(e) => set('team_size', onlyDigits(e.target.value).slice(0, 3))}
+                placeholder="Ex.: 10"
+                inputMode="numeric"
+                style={{ maxWidth: 180 }}
+              />
+              {errors.team_size && <span className="error-text">{errors.team_size}</span>}
             </div>
           </div>
 
