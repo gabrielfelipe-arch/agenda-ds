@@ -250,6 +250,7 @@ export default function RequestsPage() {
                 <tr>
                   <th>Protocolo</th>
                   <th>Data / hora</th>
+                  <th>Tipo</th>
                   <th>Solicitante</th>
                   <th>Local</th>
                   <th>Bairro</th>
@@ -270,6 +271,7 @@ export default function RequestsPage() {
                         {r.start_time} às {addHours(r.start_time, r.duration_hours)} · chegada {r.arrival_time}
                       </div>
                     </td>
+                    <td className="cell-soft">{r.event_type || '—'}</td>
                     <td>
                       <div className="cell-strong">{r.requester_name}</div>
                       <div className="cell-soft">{maskPhone(r.whatsapp)}</div>
@@ -337,6 +339,7 @@ export default function RequestsPage() {
                   <Icon.Calendar />
                   <span>
                     {formatDateBR(r.event_date)} · {r.start_time}–{addHours(r.start_time, r.duration_hours)}
+                    {r.event_type ? ` · ${r.event_type}` : ''}
                   </span>
                 </div>
                 <div className="req-line">
