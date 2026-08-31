@@ -283,7 +283,7 @@ export default function RequestsPage() {
                       {r.city}
                       {r.state ? ` - ${r.state}` : ''}
                     </td>
-                    <td className="cell-soft">{r.event_type || '—'}</td>
+                    <td className="cell-soft">{r.event_type ? r.event_type.toUpperCase() : '—'}</td>
                     <td className="cell-soft">
                       <div className="cell-clamp" title={r.agenda}>
                         {r.agenda}
@@ -339,7 +339,7 @@ export default function RequestsPage() {
                   <Icon.Calendar />
                   <span>
                     {formatDateBR(r.event_date)} · {r.start_time}–{addHours(r.start_time, r.duration_hours)}
-                    {r.event_type ? ` · ${r.event_type}` : ''}
+                    {r.event_type ? ` · ${r.event_type.toUpperCase()}` : ''}
                   </span>
                 </div>
                 <div className="req-line">
