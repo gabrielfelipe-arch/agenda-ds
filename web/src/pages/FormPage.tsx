@@ -161,7 +161,9 @@ export default function FormPage() {
     if (!data.arrival_time) e.arrival_time = 'Informe o horário de chegada';
     else if (data.start_time && data.arrival_time > data.start_time)
       e.arrival_time = 'A chegada da equipe não pode ser depois do início do evento';
+    if (onlyDigits(data.cep).length !== 8) e.cep = 'Informe o CEP completo';
     if (data.street.trim().length < 3) e.street = 'Informe a rua / avenida';
+    if (data.district.trim().length < 2) e.district = 'Informe o bairro';
     if (!data.number.trim()) e.number = 'Informe o número';
     if (data.city.trim().length < 2) e.city = 'Informe a cidade';
     if (!data.event_type) e.event_type = 'Selecione o tipo de evento';
@@ -455,7 +457,7 @@ export default function FormPage() {
 
             <div className="field">
               <label className="label" htmlFor="cep">
-                CEP
+                CEP<span className="req">*</span>
               </label>
               <span className="hint">Digite o CEP e o endereço será preenchido automaticamente.</span>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -530,14 +532,15 @@ export default function FormPage() {
               <div className="grid-3 grid-addr">
                 <div className="field">
                   <label className="label" htmlFor="bairro">
-                    Bairro
+                    Bairro<span className="req">*</span>
                   </label>
                   <input
                     id="bairro"
-                    className="input"
+                    className={`input ${errors.district ? 'error' : ''}`}
                     value={data.district}
                     onChange={(e) => set('district', e.target.value)}
                   />
+                  {errors.district && <span className="error-text">{errors.district}</span>}
                 </div>
                 <div className="field">
                   <label className="label" htmlFor="cidade">
