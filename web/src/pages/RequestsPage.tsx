@@ -250,11 +250,11 @@ export default function RequestsPage() {
                 <tr>
                   <th>Protocolo</th>
                   <th>Data / hora</th>
-                  <th>Tipo</th>
                   <th>Solicitante</th>
                   <th>Local</th>
                   <th>Bairro</th>
                   <th>Cidade</th>
+                  <th>Tipo</th>
                   <th>Pauta / briefing</th>
                   <th>Público</th>
                   <th>Status</th>
@@ -271,7 +271,6 @@ export default function RequestsPage() {
                         {r.start_time} às {addHours(r.start_time, r.duration_hours)} · chegada {r.arrival_time}
                       </div>
                     </td>
-                    <td className="cell-soft">{r.event_type || '—'}</td>
                     <td>
                       <div className="cell-strong">{r.requester_name}</div>
                       <div className="cell-soft">{maskPhone(r.whatsapp)}</div>
@@ -284,6 +283,7 @@ export default function RequestsPage() {
                       {r.city}
                       {r.state ? ` - ${r.state}` : ''}
                     </td>
+                    <td className="cell-soft">{r.event_type || '—'}</td>
                     <td className="cell-soft">
                       <div className="cell-clamp" title={r.agenda}>
                         {r.agenda}
