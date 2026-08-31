@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { db, getSettings } from '../db';
-import { audienceOptions, onlyDigits, todayISO, upper } from '../shared';
+import { EVENT_TYPES, audienceOptions, onlyDigits, todayISO, upper } from '../shared';
 
 export const publicRouter = Router();
 
@@ -35,6 +35,7 @@ const createSchema = z.object({
   city: z.string().trim().min(2, 'Informe a cidade').max(120),
   state: z.string().trim().max(2).optional().default(''),
   reference: z.string().trim().max(200).optional().default(''),
+  event_type: z.enum(EVENT_TYPES, { message: 'Selecione o tipo de evento' }),
   audience: z.string().trim().min(1, 'Selecione o público estimado'),
   agenda: z.string().trim().min(10, 'Descreva a pauta com pelo menos 10 caracteres').max(4000),
   needs_material: z.boolean({ message: 'Informe se necessita material de divulgação' }),
@@ -99,11 +100,11 @@ publicRouter.post('/requests', async (req, res) => {
     `INSERT INTO requests (
       id, protocol, created_at, updated_at, status, requester_name, whatsapp, event_date,
       start_time, duration_hours, arrival_time, cep, street, number, complement, district,
-      city, state, reference, audience, agenda, needs_material, team_size
+      city, state, reference, audience, agenda, needs_material, team_size, event_type
     ) VALUES (
       @id, @protocol, @created_at, @updated_at, 'pendente', @requester_name, @whatsapp, @event_date,
       @start_time, @duration_hours, @arrival_time, @cep, @street, @number, @complement, @district,
-      @city, @state, @reference, @audience, @agenda, @needs_material, @team_size
+      @city, @state, @reference, @audience, @agenda, @needs_material, @team_size, @event_type
     )`
   ).run({
     id,
@@ -129,6 +130,7 @@ publicRouter.post('/requests', async (req, res) => {
     agenda: upper(d.agenda),
     needs_material: d.needs_material ? 1 : 0,
     team_size: d.team_size,
+    event_type: d.event_type,
   });
 
   res.status(201).json({ id, protocol, successMessage: s.form_success_message });

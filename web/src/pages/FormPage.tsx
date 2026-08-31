@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, type FormConfig } from '../api';
+import { api, EVENT_TYPES, type FormConfig } from '../api';
 import { DURATION_VALUES, Icon, durationLabel, maskCep, maskPhone, onlyDigits, todayISO } from '../ui';
 
 interface FormData {
@@ -20,6 +20,7 @@ interface FormData {
   city: string;
   state: string;
   reference: string;
+  event_type: string;
   audience: string;
   agenda: string;
 }
@@ -41,6 +42,7 @@ const EMPTY: FormData = {
   city: '',
   state: '',
   reference: '',
+  event_type: '',
   audience: '',
   agenda: '',
 };
@@ -162,6 +164,7 @@ export default function FormPage() {
     if (data.street.trim().length < 3) e.street = 'Informe a rua / avenida';
     if (!data.number.trim()) e.number = 'Informe o número';
     if (data.city.trim().length < 2) e.city = 'Informe a cidade';
+    if (!data.event_type) e.event_type = 'Selecione o tipo de evento';
     if (data.needs_material === null) e.needs_material = 'Informe se necessita material de divulgação';
     const equipe = Number(onlyDigits(data.team_size));
     if (!data.team_size || equipe < 1 || equipe > 500)
@@ -581,6 +584,26 @@ export default function FormPage() {
           {/* ------------------------------ público ------------------------------ */}
           <div className="card" style={{ marginTop: 14 }}>
             <div className="section-title">Sobre a atividade</div>
+
+            <div className="field">
+              <label className="label" htmlFor="tipo">
+                Tipo de evento<span className="req">*</span>
+              </label>
+              <select
+                id="tipo"
+                className={`select ${errors.event_type ? 'error' : ''}`}
+                value={data.event_type}
+                onChange={(e) => set('event_type', e.target.value)}
+              >
+                <option value="">Selecione…</option>
+                {EVENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              {errors.event_type && <span className="error-text">{errors.event_type}</span>}
+            </div>
 
             <div className="field">
               <label className="label" htmlFor="publico">

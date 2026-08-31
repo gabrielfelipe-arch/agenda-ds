@@ -17,6 +17,10 @@ export function audienceOptions(): string[] {
   return opts;
 }
 
+/** Tipos de evento aceitos no formulário e nos eventos. */
+export const EVENT_TYPES = ['Reunião', 'Encontro', 'Caminhada', 'Panfletagem', 'Outros'] as const;
+export type EventType = (typeof EVENT_TYPES)[number];
+
 /** Durações aceitas. O valor 4 representa "mais de 3 horas". */
 export const DURATION_VALUES = [1, 2, 3, 4] as const;
 
@@ -49,6 +53,7 @@ export interface RequestRow {
   agenda: string;
   needs_material: number;
   team_size: number | null;
+  event_type: string | null;
   admin_notes: string | null;
   google_event_id: string | null;
   google_event_link: string | null;
@@ -122,6 +127,7 @@ export function renderTemplate(tpl: string, r: RequestRow): string {
     whatsapp: r.whatsapp,
     material: r.needs_material ? 'Sim' : 'Não',
     equipe: r.team_size != null ? String(r.team_size) : '',
+    tipo: r.event_type || '',
   };
   return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k: string) => map[k] ?? '');
 }
@@ -181,6 +187,7 @@ export interface EventRow {
   end_time: string | null;
   location: string;
   description: string | null;
+  event_type: string | null;
   image_url: string | null;
   collect_open: number;
   request_id: string | null;

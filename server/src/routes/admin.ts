@@ -8,6 +8,7 @@ import { db, getSettings, setSettings } from '../db';
 import { env } from '../env';
 import { AuthedRequest, requireAuth, requireRole } from '../auth';
 import {
+  EVENT_TYPES,
   RequestRow,
   STATUSES,
   STATUS_LABELS,
@@ -46,6 +47,7 @@ interface Filters {
   city?: string | string[];
   district?: string | string[];
   audience?: string | string[];
+  type?: string | string[];
 }
 
 /** Aceita `city=A&city=B` e também `city=A,B`. */
@@ -96,6 +98,17 @@ function buildQuery(f: Filters) {
 
   const audiences = asList(f.audience);
   if (audiences.length) where.push(inClause('audience', audiences, 'au', params, false));
+
+  const NA = 'Não informado';
+  const types = asList(f.type);
+  if (types.length) {
+    const reais = types.filter((t) => t !== NA && (EVENT_TYPES as readonly string[]).includes(t));
+    const semTipo = types.includes(NA);
+    const partes: string[] = [];
+    if (reais.length) partes.push(inClause('event_type', reais, 'tp', params, false));
+    if (semTipo) partes.push("(event_type IS NULL OR TRIM(event_type) = '')");
+    if (partes.length) where.push(`(${partes.join(' OR ')})`);
+  }
   if (f.q) {
     where.push(
       '(LOWER(requester_name) LIKE @q OR whatsapp LIKE @q OR LOWER(agenda) LIKE @q OR LOWER(protocol) LIKE @q OR LOWER(street) LIKE @q OR LOWER(district) LIKE @q)'
@@ -186,12 +199,20 @@ adminRouter.get('/options', async (_req, res) => {
     )
     .all<{ value: string; city: string; count: number }>();
 
+  const typeRows = await facet('event_type');
+  const semTipoRow = await db
+    .prepare("SELECT COUNT(*) AS n FROM requests WHERE event_type IS NULL OR TRIM(event_type) = ''")
+    .get<{ n: number }>();
+  const types = [...typeRows];
+  if ((semTipoRow?.n ?? 0) > 0) types.push({ value: 'Não informado', count: semTipoRow!.n });
+
   const totalRow = await db.prepare('SELECT COUNT(*) AS n FROM requests').get<{ n: number }>();
   res.json({
     statuses,
     cities: await facet('city'),
     districts,
     audiences: await facet('audience'),
+    types,
     total: totalRow?.n ?? 0,
   });
 });
@@ -228,6 +249,9 @@ const updateSchema = z.object({
   reference: z.string().max(200).optional(),
   audience: z.string().max(60).optional(),
   agenda: z.string().max(4000).optional(),
+  event_type: z.enum(EVENT_TYPES).optional(),
+  needs_material: z.boolean().optional(),
+  team_size: z.number().int().min(1).max(500).optional(),
   syncGoogle: z.boolean().optional(),
 });
 
@@ -241,8 +265,9 @@ adminRouter.patch('/requests/:id', async (req, res) => {
     return res.status(400).json({ error: `Campo inválido: ${issue.path.join('.')} - ${issue.message}` });
   }
   // A edição pelo admin segue a mesma regra do formulário: texto em caixa alta.
-  const { syncGoogle, ...rest } = parsed.data;
-  const data = upperFields(rest);
+  const { syncGoogle, needs_material, ...rest } = parsed.data;
+  const data: typeof rest & { needs_material?: number } = upperFields(rest);
+  if (needs_material !== undefined) data.needs_material = needs_material ? 1 : 0;
   if (data.whatsapp) data.whatsapp = onlyDigits(data.whatsapp);
   if (data.number) data.number = data.number.toUpperCase();
   if (data.cep) data.cep = onlyDigits(data.cep);
@@ -400,6 +425,7 @@ adminRouter.get('/export.xlsx', async (req, res) => {
     { header: 'Término', key: 'end_time', width: 9 },
     { header: 'Duração', key: 'duration_label', width: 16 },
     { header: 'Chegada', key: 'arrival_time', width: 10 },
+    { header: 'Tipo de evento', key: 'event_type', width: 16 },
     { header: 'Material de divulgação', key: 'needs_material', width: 20 },
     { header: 'Pessoas na equipe', key: 'team_size', width: 16 },
     { header: 'Solicitante', key: 'requester_name', width: 30 },
@@ -429,6 +455,7 @@ adminRouter.get('/export.xlsx', async (req, res) => {
       weekday: weekdayBR(r.event_date),
       duration_label: durationLabel(r.duration_hours),
       end_time: addHours(r.start_time, r.duration_hours),
+      event_type: r.event_type || 'Não informado',
       needs_material: r.needs_material ? 'Sim' : 'Não',
       team_size: r.team_size ?? '',
       created_at: new Date(r.created_at).toLocaleString('pt-BR'),

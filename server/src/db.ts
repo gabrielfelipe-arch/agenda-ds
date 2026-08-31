@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS requests (
   agenda TEXT NOT NULL,
   needs_material INTEGER NOT NULL DEFAULT 0,
   team_size INTEGER,
+  event_type TEXT,
   admin_notes TEXT,
   google_event_id TEXT,
   google_event_link TEXT,
@@ -157,6 +158,7 @@ CREATE TABLE IF NOT EXISTS events (
   description TEXT,
   image_url TEXT,
   collect_open INTEGER NOT NULL DEFAULT 1,
+  event_type TEXT,
   request_id TEXT,
   created_by TEXT
 );
@@ -192,6 +194,8 @@ export async function initSchema() {
   for (const ddl of [
     'ALTER TABLE requests ADD COLUMN needs_material INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE requests ADD COLUMN team_size INTEGER',
+    'ALTER TABLE requests ADD COLUMN event_type TEXT',
+    'ALTER TABLE events ADD COLUMN event_type TEXT',
   ]) {
     try {
       await db.exec(ddl);

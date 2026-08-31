@@ -6,6 +6,7 @@ import { env } from '../env';
 import { AuthedRequest, requireAuth, requireRole } from '../auth';
 import {
   AttendeeRow,
+  EVENT_TYPES,
   EventRow,
   RequestRow,
   addHours,
@@ -165,6 +166,7 @@ const eventSchema = z.object({
   location: z.string().trim().min(3, 'Informe o local').max(300),
   description: z.string().trim().max(4000).optional().default(''),
   collect_open: z.boolean().optional().default(true),
+  event_type: z.enum(EVENT_TYPES).optional().or(z.literal('')).default(''),
   status: z.enum(['ativo', 'cancelado']).optional(),
 });
 
@@ -184,6 +186,7 @@ adminEventsRouter.post('/', async (req, res) => {
       end_time: addHours(r.start_time, r.duration_hours),
       location: formatAddress(r) || 'A definir',
       description: '',
+      event_type: (r.event_type as (typeof EVENT_TYPES)[number]) || undefined,
     };
   }
 
@@ -209,6 +212,7 @@ adminEventsRouter.post('/', async (req, res) => {
     description: d.description || null,
     image_url: null,
     collect_open: d.collect_open ? 1 : 0,
+    event_type: d.event_type || null,
     request_id: fromRequest || null,
     created_by: user.name,
   };
@@ -216,8 +220,8 @@ adminEventsRouter.post('/', async (req, res) => {
   await db
     .prepare(
       `INSERT INTO events (id, slug, created_at, updated_at, status, title, event_date, start_time,
-        end_time, location, description, image_url, collect_open, request_id, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        end_time, location, description, image_url, collect_open, event_type, request_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       ev.id,
@@ -233,6 +237,7 @@ adminEventsRouter.post('/', async (req, res) => {
       ev.description,
       ev.image_url,
       ev.collect_open,
+      ev.event_type,
       ev.request_id,
       ev.created_by
     );
@@ -259,6 +264,7 @@ adminEventsRouter.patch('/:id', async (req, res) => {
     location: d.location !== undefined ? upper(d.location) : ev.location,
     description: d.description !== undefined ? d.description || null : ev.description,
     collect_open: d.collect_open !== undefined ? (d.collect_open ? 1 : 0) : ev.collect_open,
+    event_type: d.event_type !== undefined ? d.event_type || null : ev.event_type,
     status: d.status ?? ev.status,
     updated_at: new Date().toISOString(),
   };
@@ -266,7 +272,7 @@ adminEventsRouter.patch('/:id', async (req, res) => {
   await db
     .prepare(
       `UPDATE events SET title = ?, event_date = ?, start_time = ?, end_time = ?, location = ?,
-        description = ?, collect_open = ?, status = ?, updated_at = ? WHERE id = ?`
+        description = ?, collect_open = ?, event_type = ?, status = ?, updated_at = ? WHERE id = ?`
     )
     .run(
       next.title,
@@ -276,6 +282,7 @@ adminEventsRouter.patch('/:id', async (req, res) => {
       next.location,
       next.description,
       next.collect_open,
+      next.event_type,
       next.status,
       next.updated_at,
       ev.id

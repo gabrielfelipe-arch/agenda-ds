@@ -5,6 +5,7 @@ import {
   api,
   downloadFile,
   eventPublicUrl,
+  EVENT_TYPES,
   type Attendee,
   type EventItem,
 } from '../api';
@@ -221,6 +222,7 @@ interface EventForm {
   end_time: string;
   location: string;
   description: string;
+  event_type: string;
   collect_open: boolean;
 }
 
@@ -242,6 +244,7 @@ function EventModal({
     end_time: item?.end_time || '',
     location: item?.location || '',
     description: item?.description || '',
+    event_type: item?.event_type || '',
     collect_open: item ? item.collect_open : true,
   });
   const [busy, setBusy] = useState(false);
@@ -392,6 +395,18 @@ function EventModal({
           placeholder="PRAÇA NELSON MANDELA - BOTAFOGO"
           maxLength={300}
         />
+      </div>
+
+      <div className="field">
+        <label className="label">Tipo de evento</label>
+        <select className="select" value={data.event_type} onChange={(e) => set('event_type', e.target.value)}>
+          <option value="">Não informado</option>
+          {EVENT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="field">

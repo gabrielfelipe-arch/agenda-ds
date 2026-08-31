@@ -137,6 +137,9 @@ export async function uploadImage(kind: UploadKind, file: File): Promise<{ url: 
 /* --------------------------------- tipos --------------------------------- */
 
 export type Status = 'pendente' | 'confirmado' | 'recusado' | 'realizado' | 'cancelado';
+
+/** Tipos de evento — mesma lista do servidor. */
+export const EVENT_TYPES = ['Reunião', 'Encontro', 'Caminhada', 'Panfletagem', 'Outros'] as const;
 export type Role = 'admin' | 'gerente';
 
 export interface User {
@@ -173,6 +176,7 @@ export interface AgendaRequest {
   agenda: string;
   needs_material: number;
   team_size: number | null;
+  event_type: string | null;
   admin_notes: string | null;
   google_event_id: string | null;
   google_event_link: string | null;
@@ -238,6 +242,7 @@ export interface EventItem {
   location: string;
   description: string | null;
   image_url: string | null;
+  event_type: string | null;
   collect_open: boolean;
   registration_open: boolean;
   request_id: string | null;

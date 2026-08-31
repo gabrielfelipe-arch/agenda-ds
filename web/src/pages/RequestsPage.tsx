@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, downloadFile, STATUS_LABELS, type AgendaRequest, type EventItem, type Status } from '../api';
+import { api, downloadFile, EVENT_TYPES, STATUS_LABELS, type AgendaRequest, type EventItem, type Status } from '../api';
 import { useAuth } from '../auth';
 import {
   Icon,
@@ -31,6 +31,7 @@ export interface Filters {
   city: string[];
   district: string[];
   audience: string[];
+  type: string[];
 }
 
 export interface FilterOptions {
@@ -38,6 +39,7 @@ export interface FilterOptions {
   cities: { value: string; count: number }[];
   districts: { value: string; city: string; count: number }[];
   audiences: { value: string; count: number }[];
+  types: { value: string; count: number }[];
   total: number;
 }
 
@@ -46,6 +48,7 @@ export const EMPTY_OPTIONS: FilterOptions = {
   cities: [],
   districts: [],
   audiences: [],
+  types: [],
   total: 0,
 };
 
@@ -57,6 +60,7 @@ export const EMPTY_FILTERS: Filters = {
   city: [],
   district: [],
   audience: [],
+  type: [],
 };
 
 export function buildQuery(f: Filters): string {
@@ -66,6 +70,7 @@ export function buildQuery(f: Filters): string {
   f.city.forEach((v) => p.append('city', v));
   f.district.forEach((v) => p.append('district', v));
   f.audience.forEach((v) => p.append('audience', v));
+  f.type.forEach((v) => p.append('type', v));
   if (f.from) p.set('from', f.from);
   if (f.to) p.set('to', f.to);
   if (f.q) p.set('q', f.q);
@@ -79,6 +84,7 @@ export function countActiveFilters(f: Filters): number {
     f.city.length +
     f.district.length +
     f.audience.length +
+    f.type.length +
     (f.from ? 1 : 0) +
     (f.to ? 1 : 0) +
     (f.q ? 1 : 0)
@@ -463,6 +469,12 @@ export function FiltersBar({
     count: a.count,
   }));
 
+  const typeOptions: MultiOption[] = options.types.map((t) => ({
+    value: t.value,
+    label: t.value,
+    count: t.count,
+  }));
+
   const active = countActiveFilters(filters);
 
   return (
@@ -484,6 +496,14 @@ export function FiltersBar({
           selected={filters.status}
           onChange={(v) => set('status', v)}
           emptyHint="Sem solicitações"
+        />
+
+        <MultiSelect
+          label="Tipo"
+          options={typeOptions}
+          selected={filters.type}
+          onChange={(v) => set('type', v)}
+          emptyHint="Sem tipos"
         />
 
         <div className="field" style={{ flex: '1 1 140px' }}>
@@ -683,6 +703,27 @@ function RequestModal({
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState(item.admin_notes || '');
+  const [tipo, setTipo] = useState(item.event_type || '');
+  const [material, setMaterial] = useState(item.needs_material ? 'sim' : 'nao');
+  const [equipe, setEquipe] = useState(item.team_size != null ? String(item.team_size) : '');
+
+  /** Salva tipo, material e equipe — permite completar solicitações antigas. */
+  async function saveExtras() {
+    setBusy(true);
+    try {
+      const payload: Record<string, unknown> = { needs_material: material === 'sim' };
+      if (tipo) payload.event_type = tipo;
+      const n = Number(equipe);
+      if (equipe && n >= 1 && n <= 500) payload.team_size = n;
+      const res = await api.patch<{ item: AgendaRequest }>(`/admin/requests/${item.id}`, payload);
+      onChanged(res.item);
+      toast.ok('Dados da atividade atualizados.');
+    } catch (e) {
+      toast.err((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   /** Cria um evento com lista de presença a partir desta solicitação. */
   async function gerarEvento() {
@@ -808,6 +849,7 @@ function RequestModal({
         />
         <Detail k="Chegada da equipe" v={item.arrival_time} />
         <Detail k="Público estimado" v={item.audience} />
+        <Detail k="Tipo de evento" v={item.event_type || 'Não informado'} />
         <Detail k="Material de divulgação" v={item.needs_material ? 'Sim' : 'Não'} />
         <Detail k="Pessoas na equipe" v={item.team_size != null ? String(item.team_size) : '—'} />
       </div>
@@ -846,6 +888,45 @@ function RequestModal({
               {STATUS_LABELS[s]}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="label">Dados da atividade</label>
+        <div className="grid-3">
+          <div className="field" style={{ margin: 0 }}>
+            <span className="hint">Tipo de evento</span>
+            <select className="select" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              <option value="">Não informado</option>
+              {EVENT_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <span className="hint">Material de divulgação</span>
+            <select className="select" value={material} onChange={(e) => setMaterial(e.target.value)}>
+              <option value="nao">Não</option>
+              <option value="sim">Sim</option>
+            </select>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <span className="hint">Pessoas na equipe</span>
+            <input
+              className="input"
+              value={equipe}
+              onChange={(e) => setEquipe(e.target.value.replace(/\D+/g, '').slice(0, 3))}
+              placeholder="Ex.: 10"
+              inputMode="numeric"
+            />
+          </div>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => void saveExtras()} disabled={busy}>
+            Salvar dados da atividade
+          </button>
         </div>
       </div>
 
